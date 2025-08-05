@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  frontend:
+    build: 
+      context: \\wsl.localhost\Ubuntu-22.04\home\tgm\CCSO\Workspaces\wiretap\frontend
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - \\wsl.localhost\Ubuntu-22.04\home\tgm\CCSO\Workspaces\wiretap\frontend:/app
+    networks:
+      - app-network
+    ports:
+      - "5010:8080"
+    environment:
+      - VITE_APP_TITLE=Wiretap
+      - VITE_BACKEND_URL=http://localhost:5011
+      - CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_INTERVAL=1000
+      - WATCHPACK_POLLING=true
+
+  backend:
+    build:
+      context: \\wsl.localhost\Ubuntu-22.04\home\tgm\CCSO\Workspaces\wiretap\backend
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - \\wsl.localhost\Ubuntu-22.04\home\tgm\CCSO\Workspaces\wiretap\backend:/app
+    networks:
+      - app-network
+    ports:
+      - "5011:3000"
+    depends_on:
+      - db
+    environment:
+      - NODE_ENV=development
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_INTERVAL=1000
+
+  db:
+    image: mysql:8.4.0
+    networks:
+      - app-network
+    environment:
+      - MYSQL_ROOT_PASSWORD=msnAqX3KdoEti5k8Qgazn
+      - MYSQL_DATABASE=wiretap
+      - MYSQL_USER=wiretap
+      - MYSQL_PASSWORD=msnAqX3KdoEti5k8Qgazn
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    networks:
+      - app-network
+    environment:
+      - PMA_HOST=db
+      - PMA_USER=root
+      - PMA_PASSWORD=msnAqX3KdoEti5k8Qgazn
+    ports:
+      - "5012:80"
+    depends_on:
+      - db
+
+volumes:
+  mysql_data:
+
+networks:
+  app-network:

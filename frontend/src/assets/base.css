@@ -1,0 +1,413 @@
+/* src/assets/base.css */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply font-body antialiased;
+  }
+  body {
+    @apply bg-richblack text-seasalt;
+    font-size: 14px; /* Smaller base font on mobile */
+  }
+  
+  /* Responsive font sizes */
+  @media (min-width: 768px) {
+    body {
+      font-size: 16px; /* Normal size on desktop */
+    }
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading font-semibold text-yaleblue;
+  }
+  
+  /* Mobile-specific heading adjustments */
+  h1 {
+    font-size: 2rem; /* 32px on mobile */
+  }
+  
+  h2 {
+    font-size: 1.5rem; /* 24px on mobile */
+  }
+  
+  h3 {
+    font-size: 1.25rem; /* 20px on mobile */
+  }
+  
+  h4 {
+    font-size: 1.125rem; /* 18px on mobile */
+  }
+  
+  h5 {
+    font-size: 1rem; /* 16px on mobile */
+  }
+  
+  h6 {
+    font-size: 0.875rem; /* 14px on mobile */
+  }
+  
+  /* Desktop heading sizes */
+  @media (min-width: 768px) {
+    h1 {
+      font-size: 2.5rem; /* 40px on desktop */
+    }
+    
+    h2 {
+      font-size: 2rem; /* 32px on desktop */
+    }
+    
+    h3 {
+      font-size: 1.5rem; /* 24px on desktop */
+    }
+    
+    h4 {
+      font-size: 1.25rem; /* 20px on desktop */
+    }
+    
+    h5 {
+      font-size: 1.125rem; /* 18px on desktop */
+    }
+    
+    h6 {
+      font-size: 1rem; /* 16px on desktop */
+    }
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 border border-transparent text-xs font-medium rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  /* Larger buttons on desktop */
+  @media (min-width: 768px) {
+    .btn {
+      @apply px-6 py-3 text-sm;
+    }
+  }
+  
+  .btn-primary {
+    @apply btn text-white bg-primary-600 hover:bg-mikadoyellow focus:ring-mikadoyellow shadow-lg hover:shadow-xl transform hover:-translate-y-0.5;
+  }
+  .btn-secondary {
+    @apply btn text-yaleblue bg-seasalt border-naplesyellow hover:bg-naplesyellow focus:ring-mikadoyellow;
+  }
+  .btn-outline {
+    @apply btn text-yaleblue bg-white border-naplesyellow hover:bg-naplesyellow focus:ring-mikadoyellow;
+  }
+  .btn-danger {
+    @apply btn text-white bg-error hover:bg-mikadoyellow focus:ring-error;
+  }
+  
+  .form-input,
+  .form-textarea,
+  .form-select {
+    @apply block w-full border-gray-300 rounded-lg shadow-sm focus:ring-mikadoyellow focus:border-mikadoyellow text-sm text-gray-900 transition-colors duration-200;
+    font-size: 14px; /* Smaller on mobile */
+  }
+  
+  @media (min-width: 768px) {
+    .form-input,
+    .form-textarea,
+    .form-select {
+      font-size: 16px; /* Normal size on desktop */
+    }
+  }
+  
+  .form-checkbox {
+    @apply h-4 w-4 text-mikadoyellow border-gray-300 rounded focus:ring-mikadoyellow;
+  }
+  .card {
+    @apply bg-white rounded-xl shadow-lg border border-gray-100;
+  }
+  .card-header {
+    @apply px-4 py-3 border-b border-gray-200;
+  }
+  
+  @media (min-width: 768px) {
+    .card-header {
+      @apply px-6 py-4;
+    }
+  }
+  
+  .card-content {
+    @apply p-4;
+  }
+  
+  @media (min-width: 768px) {
+    .card-content {
+      @apply p-6;
+    }
+  }
+  
+  .card-footer {
+    @apply px-4 py-3 bg-gray-50 rounded-b-xl;
+  }
+  
+  @media (min-width: 768px) {
+    .card-footer {
+      @apply px-6 py-4;
+    }
+  }
+  
+  .section-padding {
+    @apply py-12 px-4 sm:px-6 lg:px-8;
+  }
+  
+  @media (min-width: 768px) {
+    .section-padding {
+      @apply py-16;
+    }
+  }
+  
+  .container-max {
+    @apply max-w-7xl mx-auto;
+  }
+  
+  /* Mobile-specific text adjustments */
+  p {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  
+  @media (min-width: 768px) {
+    p {
+      font-size: 16px;
+      line-height: 1.6;
+    }
+  }
+  
+  /* Smaller text for secondary content on mobile */
+  .text-sm {
+    font-size: 12px;
+  }
+  
+  @media (min-width: 768px) {
+    .text-sm {
+      font-size: 14px;
+    }
+  }
+  
+  /* Override Tailwind text sizes on mobile */
+  .text-xs {
+    font-size: 10px !important;
+  }
+  
+  .text-sm {
+    font-size: 12px !important;
+  }
+  
+  .text-base {
+    font-size: 14px !important;
+  }
+  
+  .text-lg {
+    font-size: 16px !important;
+  }
+  
+  .text-xl {
+    font-size: 18px !important;
+  }
+  
+  .text-2xl {
+    font-size: 20px !important;
+  }
+  
+  .text-3xl {
+    font-size: 24px !important;
+  }
+  
+  .text-4xl {
+    font-size: 28px !important;
+  }
+  
+  .text-5xl {
+    font-size: 32px !important;
+  }
+  
+  .text-6xl {
+    font-size: 36px !important;
+  }
+  
+  .text-7xl {
+    font-size: 40px !important;
+  }
+  
+  /* Desktop text sizes */
+  @media (min-width: 768px) {
+    .text-xs {
+      font-size: 12px !important;
+    }
+    
+    .text-sm {
+      font-size: 14px !important;
+    }
+    
+    .text-base {
+      font-size: 16px !important;
+    }
+    
+    .text-lg {
+      font-size: 18px !important;
+    }
+    
+    .text-xl {
+      font-size: 20px !important;
+    }
+    
+    .text-2xl {
+      font-size: 24px !important;
+    }
+    
+    .text-3xl {
+      font-size: 30px !important;
+    }
+    
+    .text-4xl {
+      font-size: 36px !important;
+    }
+    
+    .text-5xl {
+      font-size: 48px !important;
+    }
+    
+    .text-6xl {
+      font-size: 60px !important;
+    }
+    
+    .text-7xl {
+      font-size: 72px !important;
+    }
+  }
+}
+
+/* Animation Classes */
+/* Base animation styles */
+[data-animate] {
+  opacity: 0;
+  transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Fade in animation */
+.animate-fade-in {
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+}
+
+[data-animate="fade"] {
+  transform: translateY(30px);
+}
+
+/* Slide animations */
+.animate-slide-left {
+  opacity: 1 !important;
+  transform: translateX(0) !important;
+}
+
+[data-animate="slide-left"] {
+  transform: translateX(-50px);
+}
+
+.animate-slide-right {
+  opacity: 1 !important;
+  transform: translateX(0) !important;
+}
+
+[data-animate="slide-right"] {
+  transform: translateX(50px);
+}
+
+.animate-slide-up {
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+}
+
+[data-animate="slide-up"] {
+  transform: translateY(50px);
+}
+
+.animate-slide-down {
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+}
+
+[data-animate="slide-down"] {
+  transform: translateY(-50px);
+}
+
+/* Scale animation */
+.animate-scale-in {
+  opacity: 1 !important;
+  transform: scale(1) !important;
+}
+
+[data-animate="scale"] {
+  transform: scale(0.8);
+}
+
+/* Stagger animation */
+.animate-stagger {
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+}
+
+[data-animate="stagger"] {
+  transform: translateY(30px);
+}
+
+[data-stagger] {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.animate-stagger-item {
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+}
+
+/* Bounce animation */
+.animate-bounce-in {
+  opacity: 1 !important;
+  transform: scale(1) !important;
+  animation: bounceIn 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+[data-animate="bounce"] {
+  transform: scale(0.3);
+}
+
+/* Rotate animation */
+.animate-rotate-in {
+  opacity: 1 !important;
+  transform: rotate(0deg) scale(1) !important;
+}
+
+[data-animate="rotate"] {
+  transform: rotate(-180deg) scale(0.5);
+}
+
+/* Keyframes */
+@keyframes bounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

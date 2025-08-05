@@ -1,0 +1,18 @@
+{
+  "name": "Wiretap Dev Environment",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "backend",
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "stopCompose",
+  "remoteUser": "root",
+  "overrideCommand": true,
+  "forwardPorts": [5010, 5011, 5012],
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/workspace,type=bind",
+    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.gitconfig,target=/root/.gitconfig,type=bind"
+  ],
+  "settings": {
+    "terminal.integrated.defaultProfile.linux": "bash"
+  },
+  "postCreateCommand": "ls /workspace && npm install --prefix /workspace/backend && npm install --prefix /workspace/frontend"
+}

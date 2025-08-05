@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Launch API",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}/backend/index.js",
+            "envFile": "${workspaceFolder}/backend/.env",
+            "cwd": "${workspaceFolder}/backend"
+        }
+    ]
+}
