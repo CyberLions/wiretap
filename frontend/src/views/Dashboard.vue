@@ -1,27 +1,48 @@
 <template>
   <div class="min-h-screen bg-gray-900 p-6">
     <div class="max-w-7xl mx-auto">
-      <!-- Competition Filter (Admin Only) -->
-      <div v-if="isAdmin" class="mb-6">
-        <div class="max-w-md">
-          <label for="competition-filter" class="block text-sm font-medium text-gray-300 mb-2">
-            Filter by Competition
-          </label>
-          <select
-            id="competition-filter"
-            v-model="selectedCompetition"
-            @change="filterInstances"
-            class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="">All Competitions</option>
-            <option
-              v-for="competition in competitions"
-              :key="competition.id"
-              :value="competition.id"
+      <!-- Filters -->
+      <div class="mb-6 bg-gray-800 rounded-lg p-4 border border-gray-700">
+        <h3 class="text-lg font-medium text-white mb-4">Filters</h3>
+        <div class="flex flex-col md:flex-row gap-4">
+          <!-- Competition Dropdown -->
+          <div class="flex-1">
+            <label class="block text-sm font-medium text-gray-300 mb-2">Competition</label>
+            <select 
+              v-model="selectedCompetition" 
+              class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {{ competition.name }}
-            </option>
-          </select>
+              <option value="">All Competitions</option>
+              <option v-for="competition in competitions" :key="competition.id" :value="competition.id">
+                {{ competition.name }}
+              </option>
+            </select>
+          </div>
+
+          <!-- Team Dropdown -->
+          <div class="flex-1">
+            <label class="block text-sm font-medium text-gray-300 mb-2">Team</label>
+            <select 
+              v-model="selectedTeam" 
+              class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Teams</option>
+              <option v-for="team in availableTeams" :key="team.id" :value="team.id">
+                {{ team.name }}
+              </option>
+            </select>
+          </div>
+
+          <!-- Search Input -->
+          <div class="flex-1">
+            <label class="block text-sm font-medium text-gray-300 mb-2">Search</label>
+            <input 
+              v-model="searchQuery" 
+              type="text" 
+              placeholder="Search instances..."
+              class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
         </div>
       </div>
 
@@ -63,25 +84,23 @@
                 {{ instance.name }}
               </h3>
               <div v-if="instance.locked" class="text-yellow-400">
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
-                </svg>
+                <LockClosedIcon class="w-5 h-5" />
               </div>
             </div>
             
             <!-- Admin Info -->
             <div v-if="isAdmin" class="flex flex-wrap gap-2 mb-3">
               <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                {{ instance.team?.name || `Team ${instance.team?.number}` || 'No Team' }}
+                {{ instance.team_name || 'No Team' }}
               </span>
               <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                {{ instance.workshop?.name || 'Unknown' }}
+                {{ instance.workshop_name || 'Unknown' }}
               </span>
             </div>
 
             <!-- IP Addresses -->
             <p class="text-sm text-gray-400">
-              {{ instance.ip_addresses?.join(', ') || 'No IP addresses' }}
+              {{ parseIpAddresses(instance.ip_addresses).join(', ') || 'No IP addresses' }}
             </p>
           </div>
 
@@ -104,9 +123,7 @@
                 :to="`/console/${instance.id}`"
                 class="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-colors duration-200"
               >
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
+                <ComputerDesktopIcon class="w-4 h-4 mr-2" />
                 Console
               </router-link>
             </div>
@@ -117,10 +134,10 @@
       <!-- Empty State -->
       <div v-if="!loading && !error && filteredInstances.length === 0" class="text-center py-12">
         <div class="text-gray-400 text-lg mb-4">
-          {{ selectedCompetition ? 'No instances found for this competition' : 'No instances available' }}
+          {{ (selectedCompetition || selectedTeam || searchQuery) ? 'No instances found with the current filters' : 'No instances available' }}
         </div>
         <p class="text-gray-500">
-          {{ selectedCompetition ? 'Try selecting a different competition or contact an administrator.' : 'Contact an administrator to get access to instances.' }}
+          {{ (selectedCompetition || selectedTeam || searchQuery) ? 'Try adjusting your filters or contact our tech team.' : 'Contact our tech team to get access to instances.' }}
         </p>
       </div>
     </div>
@@ -131,9 +148,14 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import api from '@/services/api'
+import { LockClosedIcon, ComputerDesktopIcon } from '@heroicons/vue/24/outline'
 
 export default {
   name: 'Dashboard',
+  components: {
+    LockClosedIcon,
+    ComputerDesktopIcon
+  },
   setup() {
     const { user, isAdmin } = useAuth()
     
@@ -142,14 +164,33 @@ export default {
     const instances = ref([])
     const competitions = ref([])
     const selectedCompetition = ref('')
+    const selectedTeam = ref('')
+    const searchQuery = ref('')
 
     const filteredInstances = computed(() => {
-      if (!selectedCompetition.value) {
-        return instances.value
+      let filtered = instances.value
+
+      // Filter by competition
+      if (selectedCompetition.value) {
+        filtered = filtered.filter(instance => instance.workshop_id === selectedCompetition.value)
       }
-      return instances.value.filter(instance => 
-        instance.workshop?.id === selectedCompetition.value
-      )
+
+      // Filter by team
+      if (selectedTeam.value) {
+        filtered = filtered.filter(instance => instance.team_id === selectedTeam.value)
+      }
+
+      // Filter by search query
+      if (searchQuery.value) {
+        const query = searchQuery.value.toLowerCase()
+        filtered = filtered.filter(instance => 
+          instance.name.toLowerCase().includes(query) ||
+          (instance.workshop_name && instance.workshop_name.toLowerCase().includes(query)) ||
+          (instance.team_name && instance.team_name.toLowerCase().includes(query))
+        )
+      }
+
+      return filtered
     })
 
     const getStatusColor = (status) => {
@@ -171,6 +212,23 @@ export default {
           return 'bg-gray-500'
       }
     }
+
+    // Computed property for available teams
+    const availableTeams = computed(() => {
+      const allTeams = []
+      instances.value.forEach(instance => {
+        if (instance.team_id && instance.team_name) {
+          const existingTeam = allTeams.find(team => team.id === instance.team_id)
+          if (!existingTeam) {
+            allTeams.push({
+              id: instance.team_id,
+              name: instance.team_name
+            })
+          }
+        }
+      })
+      return allTeams.sort((a, b) => a.name.localeCompare(b.name))
+    })
 
     const loadInstances = async () => {
       loading.value = true
@@ -196,6 +254,15 @@ export default {
       // Filtering is handled by computed property
     }
 
+    const parseIpAddresses = (ipAddresses) => {
+      if (!ipAddresses) return []
+      try {
+        return JSON.parse(ipAddresses)
+      } catch {
+        return [ipAddresses]
+      }
+    }
+
     onMounted(() => {
       loadInstances()
     })
@@ -206,11 +273,15 @@ export default {
       instances,
       competitions,
       selectedCompetition,
+      selectedTeam,
+      searchQuery,
+      availableTeams,
       isAdmin,
       filteredInstances,
       getStatusColor,
       loadInstances,
-      filterInstances
+      filterInstances,
+      parseIpAddresses
     }
   }
 }

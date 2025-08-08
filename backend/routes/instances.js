@@ -1,8 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const { v4: uuidv4 } = require('uuid');
-const { search, searchAll, insert, update, deleteFrom, executeQuery } = require('../utils/db');
 const { authenticateToken, requireAdmin, canAccessInstance } = require('../middleware/auth');
+const { search } = require('../utils/db');
+const {
+  getAllInstances,
+  getInstanceById,
+  createInstance,
+  updateInstance,
+  deleteInstance,
+  syncInstance,
+  syncAllInstances
+} = require('../managers/instances');
 
 /**
  * @swagger
@@ -18,118 +26,115 @@ const { authenticateToken, requireAdmin, canAccessInstance } = require('../middl
  */
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const { workshop, status, power_state, team, competition } = req.query;
-    let instances;
-    let whereConditions = [];
-    let params = [];
+    const filters = {
+      workshop: req.query.workshop,
+      status: req.query.status,
+      power_state: req.query.power_state,
+      team: req.query.team,
+      competition: req.query.competition
+    };
     
-    // If user is admin, show all instances
-    if (req.user.role === 'ADMIN') {
-      let baseQuery = `
-        SELECT i.*, 
-               w.name as workshop_name,
-               t.name as team_name,
-               CONCAT(u.first_name, ' ', u.last_name) as user_name
-        FROM instances i
-        LEFT JOIN workshops w ON i.workshop_id = w.id
-        LEFT JOIN teams t ON i.team_id = t.id
-        LEFT JOIN users u ON i.user_id = u.id
-      `;
-      
-      // Add filters
-      if (workshop) {
-        whereConditions.push('i.workshop_id = ?');
-        params.push(workshop);
-      }
-      if (status) {
-        whereConditions.push('i.status = ?');
-        params.push(status);
-      }
-      if (power_state) {
-        whereConditions.push('i.power_state = ?');
-        params.push(power_state);
-      }
-      if (team) {
-        whereConditions.push('i.team_id = ?');
-        params.push(team);
-      }
-      if (competition) {
-        whereConditions.push('w.id = ?');
-        params.push(competition);
-      }
-      
-      if (whereConditions.length > 0) {
-        baseQuery += ' WHERE ' + whereConditions.join(' AND ');
-      }
-      
-      baseQuery += ' ORDER BY i.name';
-      instances = await executeQuery(baseQuery, params);
-    } else {
-      // Get instances that user has access to
-      const userTeams = await searchAll('user_teams', ['user_id'], [req.user.id]);
-      const teamIds = userTeams.map(ut => ut.team_id);
-      
-      // Get instances assigned to user or user's teams
-      const userInstances = await searchAll('instances', ['user_id'], [req.user.id]);
-      const teamInstances = teamIds.length > 0 ? 
-        await searchAll('instances', ['team_id'], teamIds) : [];
-      
-      // Combine and deduplicate
-      const allInstances = [...userInstances, ...teamInstances];
-      const instanceIds = [...new Set(allInstances.map(instance => instance.id))];
-      
-      if (instanceIds.length === 0) {
-        instances = [];
-      } else {
-        let baseQuery = `
-          SELECT i.*, 
-                 w.name as workshop_name,
-                 t.name as team_name,
-                 CONCAT(u.first_name, ' ', u.last_name) as user_name
-          FROM instances i
-          LEFT JOIN workshops w ON i.workshop_id = w.id
-          LEFT JOIN teams t ON i.team_id = t.id
-          LEFT JOIN users u ON i.user_id = u.id
-          WHERE i.id IN (${instanceIds.map(() => '?').join(',')})
-        `;
-        
-        params = [...instanceIds];
-        
-        // Add additional filters
-        if (workshop) {
-          whereConditions.push('i.workshop_id = ?');
-          params.push(workshop);
-        }
-        if (status) {
-          whereConditions.push('i.status = ?');
-          params.push(status);
-        }
-        if (power_state) {
-          whereConditions.push('i.power_state = ?');
-          params.push(power_state);
-        }
-        if (team) {
-          whereConditions.push('i.team_id = ?');
-          params.push(team);
-        }
-        if (competition) {
-          whereConditions.push('w.id = ?');
-          params.push(competition);
-        }
-        
-        if (whereConditions.length > 0) {
-          baseQuery += ' AND ' + whereConditions.join(' AND ');
-        }
-        
-        baseQuery += ' ORDER BY i.name';
-        instances = await executeQuery(baseQuery, params);
-      }
-    }
-    
+    const instances = await getAllInstances(req.user, filters);
     res.json(instances);
   } catch (error) {
     console.error('Error fetching instances:', error);
     res.status(500).json({ error: 'Failed to fetch instances' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/instances/sync:
+ *   post:
+ *     summary: Sync all instances with OpenStack
+ *     description: Synchronizes the status, power state, and IP addresses of all instances with their current state in OpenStack
+ *     tags: [Instances]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Instances synced successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Instances synced successfully"
+ *                 synced_count:
+ *                   type: number
+ *                   example: 10
+ *                 error_count:
+ *                   type: number
+ *                   example: 2
+ *                 total_instances:
+ *                   type: number
+ *                   example: 12
+ *       500:
+ *         description: Failed to sync instances
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Failed to sync instances"
+ */
+// Sync instances from OpenStack
+router.post('/sync', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await syncAllInstances();
+    res.json(result);
+  } catch (error) {
+    console.error('Error syncing instances:', error);
+    res.status(500).json({ error: 'Failed to sync instances' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/instances/sync-scheduled:
+ *   post:
+ *     summary: Trigger scheduled instance sync
+ *     description: Manually triggers the scheduled instance status update task that runs every 2 minutes
+ *     tags: [Instances]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Scheduled sync triggered successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Scheduled sync triggered successfully"
+ *       500:
+ *         description: Failed to trigger scheduled sync
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "Failed to trigger scheduled sync"
+ */
+router.post('/sync-scheduled', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { updateInstanceStatuses } = require('../managers/openstack');
+    
+    console.log('Manually triggering scheduled instance sync...');
+    await updateInstanceStatuses();
+    
+    res.json({ message: 'Scheduled sync triggered successfully' });
+  } catch (error) {
+    console.error('Error triggering scheduled sync:', error);
+    res.status(500).json({ error: 'Failed to trigger scheduled sync' });
   }
 });
 
@@ -156,19 +161,8 @@ router.get('/', authenticateToken, async (req, res) => {
 router.get('/:id', authenticateToken, canAccessInstance, async (req, res) => {
   try {
     const { id } = req.params;
-    const instances = await executeQuery(`
-      SELECT i.*, 
-             w.name as workshop_name,
-             t.name as team_name,
-             CONCAT(u.first_name, ' ', u.last_name) as user_name
-      FROM instances i
-      LEFT JOIN workshops w ON i.workshop_id = w.id
-      LEFT JOIN teams t ON i.team_id = t.id
-      LEFT JOIN users u ON i.user_id = u.id
-      WHERE i.id = ?
-    `, [id]);
+    const instance = await getInstanceById(id);
     
-    const instance = instances[0];
     if (!instance) {
       return res.status(404).json({ error: 'Instance not found' });
     }
@@ -222,45 +216,13 @@ router.get('/:id', authenticateToken, canAccessInstance, async (req, res) => {
  */
 router.post('/', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { name, workshop_id, openstack_id, team_id, user_id } = req.body;
-    
-    if (!name || !workshop_id || !openstack_id) {
-      return res.status(400).json({ 
-        error: 'Name, workshop_id, and openstack_id are required' 
-      });
-    }
-    
-    // Verify workshop exists
-    const workshop = await search('workshops', 'id', workshop_id);
-    if (!workshop) {
-      return res.status(400).json({ error: 'Workshop not found' });
-    }
-    
-    // Check if OpenStack ID already exists
-    const existingInstance = await search('instances', 'openstack_id', openstack_id);
-    if (existingInstance) {
-      return res.status(409).json({ error: 'Instance with this OpenStack ID already exists' });
-    }
-    
-    const instanceId = uuidv4();
-    const instanceData = {
-      id: instanceId,
-      name,
-      openstack_id,
-      workshop_id,
-      team_id: team_id || null,
-      user_id: user_id || null,
-      status: 'UNKNOWN',
-      power_state: 'UNKNOWN',
-      locked: false
-    };
-    
-    await insert('instances', Object.keys(instanceData), Object.values(instanceData));
-    
-    const newInstance = await search('instances', 'id', instanceId);
+    const newInstance = await createInstance(req.body);
     res.status(201).json(newInstance);
   } catch (error) {
     console.error('Error creating instance:', error);
+    if (error.message.includes('required') || error.message.includes('not found') || error.message.includes('already exists')) {
+      return res.status(400).json({ error: error.message });
+    }
     res.status(500).json({ error: 'Failed to create instance' });
   }
 });
@@ -303,24 +265,13 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
 router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const instance = await search('instances', 'id', id);
-    
-    if (!instance) {
-      return res.status(404).json({ error: 'Instance not found' });
-    }
-    
-    const updateFields = ['name', 'team_id', 'user_id', 'locked'];
-    
-    for (const field of updateFields) {
-      if (req.body[field] !== undefined) {
-        await update('instances', 'id', id, field, req.body[field]);
-      }
-    }
-    
-    const updatedInstance = await search('instances', 'id', id);
+    const updatedInstance = await updateInstance(id, req.body);
     res.json(updatedInstance);
   } catch (error) {
     console.error('Error updating instance:', error);
+    if (error.message.includes('not found')) {
+      return res.status(404).json({ error: error.message });
+    }
     res.status(500).json({ error: 'Failed to update instance' });
   }
 });
@@ -348,17 +299,13 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
 router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const instance = await search('instances', 'id', id);
-    
-    if (!instance) {
-      return res.status(404).json({ error: 'Instance not found' });
-    }
-    
-    await deleteFrom('instances', ['id'], [id]);
-    
-    res.json({ message: 'Instance deleted successfully' });
+    const result = await deleteInstance(id);
+    res.json(result);
   } catch (error) {
     console.error('Error deleting instance:', error);
+    if (error.message.includes('not found')) {
+      return res.status(404).json({ error: error.message });
+    }
     res.status(500).json({ error: 'Failed to delete instance' });
   }
 });
@@ -691,6 +638,53 @@ router.post('/:id/reboot', authenticateToken, canAccessInstance, async (req, res
   } catch (error) {
     console.error('Error rebooting instance:', error);
     res.status(500).json({ error: 'Failed to reboot instance' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/instances/{id}/sync:
+ *   post:
+ *     summary: Sync single instance with OpenStack
+ *     description: Synchronizes the status, power state, and IP addresses of a single instance with its current state in OpenStack
+ *     tags: [Instances]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Instance synced successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Instance synced successfully"
+ *                 instance:
+ *                   type: object
+ *       404:
+ *         description: Instance not found
+ *       500:
+ *         description: Failed to sync instance
+ */
+router.post('/:id/sync', authenticateToken, canAccessInstance, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await syncInstance(id);
+    res.json(result);
+  } catch (error) {
+    console.error('Error syncing instance:', error);
+    if (error.message.includes('not found')) {
+      return res.status(404).json({ error: error.message });
+    }
+    res.status(500).json({ error: 'Failed to sync instance' });
   }
 });
 

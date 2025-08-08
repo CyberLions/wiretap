@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { search, searchAll, insert, update, deleteFrom } = require('../utils/db');
+const { search, searchAll, insert, update, deleteFrom, executeQuery } = require('../utils/db');
 const { authenticateToken, requireAdmin, canAccessWorkshop } = require('../middleware/auth');
 
 /**
@@ -39,11 +39,16 @@ router.get('/', authenticateToken, async (req, res) => {
   try {
     let workshops;
     
-    // If user is admin, show all workshops
+    // If user is admin, show all workshops with provider information
     if (req.user.role === 'ADMIN') {
-      workshops = await searchAll('workshops', [], [], { orderBy: 'name' });
+      workshops = await executeQuery(`
+        SELECT w.*, p.name as provider_name
+        FROM workshops w
+        LEFT JOIN providers p ON w.provider_id = p.id
+        ORDER BY w.name
+      `);
     } else {
-      // Get workshops that user has access to
+      // Get workshops that user has access to with provider information
       const userTeams = await searchAll('user_teams', ['user_id'], [req.user.id]);
       const teamIds = userTeams.map(ut => ut.team_id);
       
@@ -56,9 +61,26 @@ router.get('/', authenticateToken, async (req, res) => {
         if (workshopIds.length === 0) {
           workshops = [];
         } else {
-          workshops = await searchAll('workshops', ['id'], workshopIds, { orderBy: 'name' });
+          const placeholders = workshopIds.map(() => '?').join(',');
+          workshops = await executeQuery(`
+            SELECT w.*, p.name as provider_name
+            FROM workshops w
+            LEFT JOIN providers p ON w.provider_id = p.id
+            WHERE w.id IN (${placeholders})
+            ORDER BY w.name
+          `, workshopIds);
         }
       }
+    }
+    
+    // Add teams data and instance count to each workshop
+    for (const workshop of workshops) {
+      const teams = await searchAll('teams', ['workshop_id'], [workshop.id], { orderBy: 'team_number' });
+      workshop.teams = teams;
+      
+      // Calculate instance count for this workshop
+      const instances = await searchAll('instances', ['workshop_id'], [workshop.id]);
+      workshop.instance_count = instances.length;
     }
     
     res.json(workshops);
@@ -234,11 +256,19 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Workshop not found' });
     }
     
-    const updateFields = ['name', 'description', 'enabled'];
+    // Validate provider_id if it's being updated
+    if (req.body.provider_id !== undefined) {
+      const provider = await search('providers', 'id', req.body.provider_id);
+      if (!provider) {
+        return res.status(400).json({ error: 'Provider not found' });
+      }
+    }
+    
+    const updateFields = ['name', 'description', 'provider_id', 'openstack_project_name', 'enabled'];
     
     for (const field of updateFields) {
       if (req.body[field] !== undefined) {
-        await update('workshops', 'id', id, field, req.body[field]);
+        await update('workshops', field, req.body[field], 'id', id);
       }
     }
     
@@ -280,16 +310,16 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
     // Find all teams in this workshop
     const teams = await searchAll('teams', ['workshop_id'], [id]);
     const teamIds = teams.map(t => t.id);
-    // Find all users with auth_type = 'PASSWORD' in these teams
+    // Find all users with @workshop.local emails in these teams
     let usersToDelete = [];
     if (teamIds.length > 0) {
       const userTeams = await searchAll('user_teams', ['team_id'], [teamIds]);
       const userIds = userTeams.map(ut => ut.user_id);
       if (userIds.length > 0) {
-        // Only delete users with auth_type = 'PASSWORD'
+        // Only delete users with @workshop.local emails (generated users)
         for (const userId of userIds) {
           const user = await search('users', 'id', userId);
-          if (user && user.auth_type === 'PASSWORD') {
+          if (user && user.email && user.email.endsWith('@workshop.local')) {
             usersToDelete.push(userId);
           }
         }
@@ -311,7 +341,12 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
     await deleteFrom('instances', ['workshop_id'], [id]);
     // Delete the workshop
     await deleteFrom('workshops', ['id'], [id]);
-    res.json({ message: 'Workshop and related users/teams/instances deleted successfully' });
+    
+    const message = usersToDelete.length > 0 
+      ? `Workshop and related teams/instances deleted successfully. ${usersToDelete.length} generated user(s) with @workshop.local emails were also deleted.`
+      : 'Workshop and related teams/instances deleted successfully.';
+    
+    res.json({ message });
   } catch (error) {
     console.error('Error deleting workshop:', error);
     res.status(500).json({ error: 'Failed to delete workshop' });

@@ -4,19 +4,31 @@
     <div class="w-64 bg-gray-800 border-r border-gray-700 flex-shrink-0">
       <div class="p-6">
         <!-- Navigation Menu -->
-        <nav class="space-y-2">
-          <button
-            v-for="item in navigationItems"
-            :key="item.id"
-            @click="selectTab(item.id)"
-            class="w-full flex items-center px-4 py-3 text-left rounded-md transition-colors duration-200"
-            :class="selectedTab === item.id 
-              ? 'bg-blue-600 text-white' 
-              : 'text-gray-300 hover:bg-gray-700 hover:text-white'"
-          >
-            <component :is="item.icon" class="w-5 h-5 mr-3" />
-            {{ item.name }}
-          </button>
+        <nav class="space-y-4">
+          <div v-for="section in navigationSections" :key="section.name" class="space-y-2">
+            <!-- Section Header -->
+            <div class="px-4 py-2">
+              <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                {{ section.name }}
+              </h3>
+            </div>
+            
+            <!-- Section Items -->
+            <div class="space-y-1">
+              <button
+                v-for="item in section.items"
+                :key="item.id"
+                @click="selectTab(item.id)"
+                class="w-full flex items-center px-4 py-3 text-left rounded-md transition-colors duration-200"
+                :class="selectedTab === item.id 
+                  ? 'bg-blue-600 text-white' 
+                  : 'text-gray-300 hover:bg-gray-700 hover:text-white'"
+              >
+                <component :is="item.icon" class="w-5 h-5 mr-3" />
+                {{ item.name }}
+              </button>
+            </div>
+          </div>
         </nav>
       </div>
     </div>
@@ -29,7 +41,7 @@
           <h1 class="text-2xl font-bold text-white">{{ getCurrentTabName() }}</h1>
           <button
             v-if="showAddButton"
-            @click="showAddModal = true"
+            @click="handleAddClick"
             class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-colors duration-200"
           >
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -61,343 +73,56 @@
           </button>
         </div>
 
-        <!-- Users Tab -->
-        <div v-else-if="selectedTab === 'users'" class="space-y-6">
-          <div class="bg-gray-800 rounded-lg shadow-lg border border-gray-700">
-            <div class="px-6 py-4 border-b border-gray-700">
-              <h3 class="text-lg font-medium text-white">User Management</h3>
-            </div>
-            <div class="p-6">
-              <div class="overflow-x-auto">
-                <table class="table">
-                  <thead class="table-header">
-                    <tr>
-                      <th>Name</th>
-                      <th>Email</th>
-                      <th>Role</th>
-                      <th>Team</th>
-                      <th>Status</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody class="table-body">
-                    <tr v-for="user in users" :key="user.id" class="table-row">
-                      <td class="table-cell">{{ user.first_name }} {{ user.last_name }}</td>
-                      <td class="table-cell">{{ user.email }}</td>
-                      <td class="table-cell">
-                        <span class="status-badge" :class="user.role === 'ADMIN' ? 'status-active' : 'status-pending'">
-                          {{ user.role }}
-                        </span>
-                      </td>
-                      <td class="table-cell">{{ user.team?.name || 'None' }}</td>
-                      <td class="table-cell">
-                        <span class="status-badge" :class="user.enabled ? 'status-active' : 'status-inactive'">
-                          {{ user.enabled ? 'Active' : 'Inactive' }}
-                        </span>
-                      </td>
-                      <td class="table-cell">
-                        <div class="flex space-x-2">
-                          <button @click="editUser(user.id)" class="text-blue-400 hover:text-blue-300">Edit</button>
-                          <button @click="deleteUser(user.id)" class="text-red-400 hover:text-red-300">Delete</button>
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+        <!-- Dynamic Content Based on Selected Tab -->
+        <div v-else>
+          <!-- Providers Tab -->
+          <div v-if="selectedTab === 'providers'">
+            <Providers />
           </div>
-        </div>
 
-        <!-- Competitions Tab -->
-        <div v-else-if="selectedTab === 'competitions'" class="space-y-6">
-          <div class="bg-gray-800 rounded-lg shadow-lg border border-gray-700">
-            <div class="px-6 py-4 border-b border-gray-700">
-              <h3 class="text-lg font-medium text-white">Competition Management</h3>
-            </div>
-            <div class="p-6">
-              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div
-                  v-for="competition in competitions"
-                  :key="competition.id"
-                  class="bg-gray-700 rounded-lg p-4 border border-gray-600"
-                >
-                  <h4 class="text-lg font-medium text-white mb-2">{{ competition.name }}</h4>
-                  <p class="text-gray-400 text-sm mb-4">{{ competition.description }}</p>
-                  <div class="flex justify-between items-center">
-                    <span class="text-sm text-gray-300">{{ competition.teams?.length || 0 }} teams</span>
-                    <div class="flex space-x-2">
-                      <button @click="editCompetition(competition.id)" class="text-blue-400 hover:text-blue-300 text-sm">Edit</button>
-                      <button @click="deleteCompetition(competition.id)" class="text-red-400 hover:text-red-300 text-sm">Delete</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <!-- Users Tab -->
+          <div v-else-if="selectedTab === 'users'">
+            <Users />
           </div>
-        </div>
 
-        <!-- Teams Tab -->
-        <div v-else-if="selectedTab === 'teams'" class="space-y-6">
-          <div class="bg-gray-800 rounded-lg shadow-lg border border-gray-700">
-            <div class="px-6 py-4 border-b border-gray-700">
-              <h3 class="text-lg font-medium text-white">Team Management</h3>
-            </div>
-            <div class="p-6">
-              <div class="overflow-x-auto">
-                <table class="table">
-                  <thead class="table-header">
-                    <tr>
-                      <th>Team Name</th>
-                      <th>Number</th>
-                      <th>Competition</th>
-                      <th>Members</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody class="table-body">
-                    <tr v-for="team in teams" :key="team.id" class="table-row">
-                      <td class="table-cell">{{ team.name }}</td>
-                      <td class="table-cell">{{ team.number }}</td>
-                      <td class="table-cell">{{ team.workshop?.name || 'Unknown' }}</td>
-                      <td class="table-cell">{{ team.members?.length || 0 }} members</td>
-                      <td class="table-cell">
-                        <div class="flex space-x-2">
-                          <button @click="editTeam(team.id)" class="text-blue-400 hover:text-blue-300">Edit</button>
-                          <button @click="deleteTeam(team.id)" class="text-red-400 hover:text-red-300">Delete</button>
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+          <!-- Workshops Tab -->
+          <div v-else-if="selectedTab === 'workshops'">
+            <Workshops />
           </div>
-        </div>
 
-        <!-- VM Objects Tab -->
-        <div v-else-if="selectedTab === 'vm-objects'" class="space-y-6">
-          <div class="bg-gray-800 rounded-lg shadow-lg border border-gray-700">
-            <div class="px-6 py-4 border-b border-gray-700">
-              <h3 class="text-lg font-medium text-white">VM Object Management</h3>
-            </div>
-            <div class="p-6">
-              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div
-                  v-for="vm in vmObjects"
-                  :key="vm.id"
-                  class="bg-gray-700 rounded-lg p-4 border border-gray-600"
-                >
-                  <div class="flex items-center justify-between mb-2">
-                    <h4 class="text-lg font-medium text-white">{{ vm.name }}</h4>
-                    <div
-                      class="w-3 h-3 rounded-full"
-                      :class="getStatusColor(vm.status)"
-                    ></div>
-                  </div>
-                  <p class="text-gray-400 text-sm mb-2">{{ vm.ip_addresses?.join(', ') || 'No IP addresses' }}</p>
-                  <p class="text-gray-400 text-sm mb-4">Team: {{ vm.team?.name || 'No Team' }}</p>
-                  <div class="flex justify-between items-center">
-                    <span class="text-sm text-gray-300">{{ vm.status }}</span>
-                    <div class="flex space-x-2">
-                      <button @click="editVM(vm.id)" class="text-blue-400 hover:text-blue-300 text-sm">Edit</button>
-                      <button @click="deleteVM(vm.id)" class="text-red-400 hover:text-red-300 text-sm">Delete</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <!-- Teams Tab -->
+          <div v-else-if="selectedTab === 'teams'">
+            <Teams />
           </div>
-        </div>
 
-        <!-- Providers Tab -->
-        <div v-else-if="selectedTab === 'providers'" class="space-y-6">
-          <div class="bg-gray-800 rounded-lg shadow-lg border border-gray-700">
-            <div class="px-6 py-4 border-b border-gray-700">
-              <h3 class="text-lg font-medium text-white">Provider Management</h3>
-            </div>
-            <div class="p-6">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div
-                  v-for="provider in providers"
-                  :key="provider.id"
-                  class="bg-gray-700 rounded-lg p-4 border border-gray-600"
-                >
-                  <h4 class="text-lg font-medium text-white mb-2">{{ provider.name }}</h4>
-                  <p class="text-gray-400 text-sm mb-2">Type: {{ provider.type }}</p>
-                  <p class="text-gray-400 text-sm mb-4">{{ provider.description }}</p>
-                  <div class="flex justify-between items-center">
-                    <span class="text-sm text-gray-300">{{ provider.enabled ? 'Active' : 'Inactive' }}</span>
-                    <div class="flex space-x-2">
-                      <button class="text-blue-400 hover:text-blue-300 text-sm">Edit</button>
-                      <button class="text-red-400 hover:text-red-300 text-sm">Delete</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <!-- VM Objects Tab -->
+          <div v-else-if="selectedTab === 'vm-objects'">
+            <VMObjects />
           </div>
-        </div>
 
-        <!-- Service Accounts Tab -->
-        <div v-else-if="selectedTab === 'service-accounts'" class="space-y-6">
-          <div class="bg-gray-800 rounded-lg shadow-lg border border-gray-700">
-            <div class="px-6 py-4 border-b border-gray-700">
-              <h3 class="text-lg font-medium text-white">Service Account Management</h3>
-            </div>
-            <div class="p-6">
-              <div class="overflow-x-auto">
-                <table class="table">
-                  <thead class="table-header">
-                    <tr>
-                      <th>Name</th>
-                      <th>API Key</th>
-                      <th>Created</th>
-                      <th>Last Used</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody class="table-body">
-                    <tr v-for="account in serviceAccounts" :key="account.id" class="table-row">
-                      <td class="table-cell">{{ account.name }}</td>
-                      <td class="table-cell font-mono text-sm">{{ account.api_key }}</td>
-                      <td class="table-cell">{{ formatDate(account.created_at) }}</td>
-                      <td class="table-cell">{{ formatDate(account.last_used) }}</td>
-                      <td class="table-cell">
-                        <div class="flex space-x-2">
-                          <button class="text-blue-400 hover:text-blue-300">Edit</button>
-                          <button class="text-red-400 hover:text-red-300">Delete</button>
-                        </div>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+          <!-- Service Accounts Tab -->
+          <div v-else-if="selectedTab === 'service-accounts'">
+            <ServiceAccounts />
           </div>
-        </div>
 
-        <!-- Ingest VMs Tab -->
-        <div v-else-if="selectedTab === 'ingest-vms'" class="space-y-6">
-          <div class="bg-gray-800 rounded-lg shadow-lg border border-gray-700">
-            <div class="px-6 py-4 border-b border-gray-700">
-              <h3 class="text-lg font-medium text-white">Ingest VMs from Provider</h3>
-            </div>
-            <div class="p-6">
-              <div class="max-w-md space-y-4">
-                <div>
-                  <label class="form-label">Select Provider</label>
-                  <select v-model="ingestForm.providerId" class="form-input">
-                    <option value="">Choose a provider</option>
-                    <option v-for="provider in providers" :key="provider.id" :value="provider.id">
-                      {{ provider.name }}
-                    </option>
-                  </select>
-                </div>
-                <div>
-                  <label class="form-label">Select Team</label>
-                  <select v-model="ingestForm.teamId" class="form-input">
-                    <option value="">Choose a team</option>
-                    <option v-for="team in teams" :key="team.id" :value="team.id">
-                      {{ team.name }}
-                    </option>
-                  </select>
-                </div>
-                <button 
-                  @click="ingestVMs"
-                  :disabled="!ingestForm.providerId || !ingestForm.teamId"
-                  class="btn btn-primary w-full"
-                >
-                  Ingest VMs
-                </button>
-              </div>
-            </div>
+          <!-- Ingest VMs Tab -->
+          <div v-else-if="selectedTab === 'ingest-vms'">
+            <IngestVMs />
           </div>
-        </div>
 
-        <!-- Generate Users Tab -->
-        <div v-else-if="selectedTab === 'generate-users'" class="space-y-6">
-          <div class="bg-gray-800 rounded-lg shadow-lg border border-gray-700">
-            <div class="px-6 py-4 border-b border-gray-700">
-              <h3 class="text-lg font-medium text-white">Generate Users</h3>
-            </div>
-            <div class="p-6">
-              <div class="max-w-md space-y-4">
-                <div>
-                  <label class="form-label">Number of Users</label>
-                  <input 
-                    v-model.number="generateForm.count" 
-                    type="number" 
-                    class="form-input" 
-                    min="1" 
-                    max="100" 
-                  />
-                </div>
-                <div>
-                  <label class="form-label">Username Prefix</label>
-                  <input 
-                    v-model="generateForm.prefix" 
-                    type="text" 
-                    class="form-input" 
-                  />
-                </div>
-                <div>
-                  <label class="form-label">Default Password</label>
-                  <input 
-                    v-model="generateForm.password" 
-                    type="password" 
-                    class="form-input" 
-                  />
-                </div>
-                <button 
-                  @click="generateUsers"
-                  :disabled="!generateForm.count || !generateForm.prefix || !generateForm.password"
-                  class="btn btn-primary w-full"
-                >
-                  Generate Users
-                </button>
-              </div>
-            </div>
+          <!-- Generate Users Tab -->
+          <div v-else-if="selectedTab === 'generate-users'">
+            <GenerateUsers />
           </div>
-        </div>
 
-        <!-- Manage Lockouts Tab -->
-        <div v-else-if="selectedTab === 'manage-lockouts'" class="space-y-6">
-          <div class="bg-gray-800 rounded-lg shadow-lg border border-gray-700">
-            <div class="px-6 py-4 border-b border-gray-700">
-              <h3 class="text-lg font-medium text-white">Manage VM Lockouts</h3>
-            </div>
-            <div class="p-6">
-              <div class="overflow-x-auto">
-                <table class="table">
-                  <thead class="table-header">
-                    <tr>
-                      <th>VM Name</th>
-                      <th>Team</th>
-                      <th>Status</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody class="table-body">
-                    <tr v-for="vm in lockedVMs" :key="vm.id" class="table-row">
-                      <td class="table-cell">{{ vm.name }}</td>
-                      <td class="table-cell">{{ vm.team?.name || 'No Team' }}</td>
-                      <td class="table-cell">
-                        <span class="status-badge status-inactive">Locked</span>
-                      </td>
-                      <td class="table-cell">
-                        <button 
-                          @click="unlockVM(vm.id)"
-                          class="text-green-400 hover:text-green-300"
-                        >
-                          Unlock
-                        </button>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+          <!-- Manage Lockouts Tab -->
+          <div v-else-if="selectedTab === 'manage-lockouts'">
+            <ManageLockouts />
+          </div>
+
+          <!-- Default/Empty State -->
+          <div v-else class="text-center py-12">
+            <div class="text-gray-400 text-lg mb-4">Select a section from the sidebar</div>
           </div>
         </div>
       </div>
@@ -407,8 +132,15 @@
 
 <script>
 import { ref, computed, onMounted } from 'vue'
-import { useAuth } from '@/composables/useAuth'
-import api from '@/services/api'
+import Providers from './Providers.vue'
+import Users from './Users.vue'
+import Workshops from './Workshops.vue'
+import Teams from './Teams.vue'
+import VMObjects from './VMObjects.vue'
+import ServiceAccounts from './ServiceAccounts.vue'
+import IngestVMs from './IngestVMs.vue'
+import GenerateUsers from './GenerateUsers.vue'
+import ManageLockouts from './ManageLockouts.vue'
 
 // Icon components (simplified for demo)
 const UserIcon = { template: '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>' }
@@ -432,51 +164,59 @@ export default {
     ServiceAccountIcon,
     ImportIcon,
     GenerateIcon,
-    LockIcon
+    LockIcon,
+    Providers,
+    Users,
+    Workshops,
+    Teams,
+    VMObjects,
+    ServiceAccounts,
+    IngestVMs,
+    GenerateUsers,
+    ManageLockouts
   },
   setup() {
-    const { user } = useAuth()
-    
     const loading = ref(false)
     const error = ref(null)
-    const selectedTab = ref('users')
-    const showAddModal = ref(false)
-
-    // Data
-    const users = ref([])
-    const competitions = ref([])
-    const teams = ref([])
-    const vmObjects = ref([])
-    const providers = ref([])
-    const serviceAccounts = ref([])
-    const lockedVMs = ref([])
-
-    // Forms
-    const ingestForm = ref({
-      providerId: '',
-      teamId: ''
-    })
-
-    const generateForm = ref({
-      count: 10,
-      prefix: 'user',
-      password: 'password123'
-    })
+    const selectedTab = ref('providers')
 
     const navigationItems = [
-      { id: 'users', name: 'Users', icon: 'UserIcon' },
-      { id: 'competitions', name: 'Competitions', icon: 'CompetitionIcon' },
-      { id: 'teams', name: 'Teams', icon: 'TeamIcon' },
-      { id: 'vm-objects', name: 'VM Objects', icon: 'VMIcon' },
-      { id: 'providers', name: 'Providers', icon: 'ProviderIcon' },
-      { id: 'service-accounts', name: 'Service Accounts', icon: 'ServiceAccountIcon' },
-      { id: 'ingest-vms', name: 'Ingest VMs', icon: 'ImportIcon' },
-      { id: 'generate-users', name: 'Generate Users', icon: 'GenerateIcon' },
-      { id: 'manage-lockouts', name: 'Manage Lockouts', icon: 'LockIcon' }
+      // User Management
+      { id: 'users', name: 'Users', icon: 'UserIcon', section: 'User Management' },
+      { id: 'generate-users', name: 'Generate Users', icon: 'GenerateIcon', section: 'User Management' },
+      
+      // Workshop Management
+      { id: 'workshops', name: 'Workshops', icon: 'CompetitionIcon', section: 'Workshop Management' },
+      { id: 'teams', name: 'Teams', icon: 'TeamIcon', section: 'Workshop Management' },
+      
+      // Infrastructure
+      { id: 'vm-objects', name: 'VM Objects', icon: 'VMIcon', section: 'Infrastructure' },
+      { id: 'providers', name: 'Providers', icon: 'ProviderIcon', section: 'Infrastructure' },
+      { id: 'ingest-vms', name: 'Ingest VMs', icon: 'ImportIcon', section: 'Infrastructure' },
+      
+      // System
+      { id: 'service-accounts', name: 'Service Accounts', icon: 'ServiceAccountIcon', section: 'System' },
+      { id: 'manage-lockouts', name: 'Manage Lockouts', icon: 'LockIcon', section: 'System' }
     ]
 
     const showAddButton = computed(() => {
-      return ['users', 'competitions', 'teams', 'vm-objects', 'providers', 'service-accounts'].includes(selectedTab.value)
+      return ['users', 'workshops', 'teams', 'vm-objects', 'providers', 'service-accounts'].includes(selectedTab.value)
+    })
+
+    const navigationSections = computed(() => {
+      const sections = {}
+      
+      navigationItems.forEach(item => {
+        if (!sections[item.section]) {
+          sections[item.section] = {
+            name: item.section,
+            items: []
+          }
+        }
+        sections[item.section].items.push(item)
+      })
+      
+      return Object.values(sections)
     })
 
     const getCurrentTabName = () => {
@@ -484,25 +224,13 @@ export default {
       return item ? item.name : ''
     }
 
-    const getStatusColor = (status) => {
-      switch (status?.toLowerCase()) {
-        case 'running':
-        case 'active':
-          return 'bg-green-500'
-        case 'stopped':
-        case 'shutoff':
-          return 'bg-red-500'
-        case 'rebooting':
-        case 'building':
-          return 'bg-yellow-500'
-        default:
-          return 'bg-gray-500'
-      }
+    const selectTab = (tabId) => {
+      selectedTab.value = tabId
     }
 
-    const formatDate = (dateString) => {
-      if (!dateString) return 'Never'
-      return new Date(dateString).toLocaleDateString()
+    const handleAddClick = () => {
+      // This will be handled by the individual components
+      console.log('Add clicked for:', selectedTab.value)
     }
 
     const loadData = async () => {
@@ -510,144 +238,13 @@ export default {
       error.value = null
       
       try {
-        const [
-          usersResponse,
-          competitionsResponse,
-          teamsResponse,
-          vmObjectsResponse,
-          providersResponse,
-          serviceAccountsResponse
-        ] = await Promise.all([
-          api.users.getAll(),
-          api.workshops.getAll(),
-          api.teams.getAll(),
-          api.instances.getAll(),
-          api.providers.getAll(),
-          api.admin.getServiceAccounts()
-        ])
-
-        users.value = usersResponse.data
-        competitions.value = competitionsResponse.data
-        teams.value = teamsResponse.data
-        vmObjects.value = vmObjectsResponse.data
-        providers.value = providersResponse.data
-        serviceAccounts.value = serviceAccountsResponse.data
-
-        // Filter locked VMs
-        lockedVMs.value = vmObjects.value.filter(vm => vm.locked)
+        // Data loading will be handled by individual components
+        // This is just for the main admin state
       } catch (err) {
         console.error('Error loading admin data:', err)
         error.value = 'Failed to load data. Please try again.'
       } finally {
         loading.value = false
-      }
-    }
-
-    const selectTab = (tabId) => {
-      selectedTab.value = tabId
-    }
-
-    const ingestVMs = async () => {
-      try {
-        await api.providers.ingestVMs(ingestForm.value.providerId, {
-          team_id: ingestForm.value.teamId
-        })
-        // Refresh data
-        await loadData()
-      } catch (err) {
-        console.error('Error ingesting VMs:', err)
-      }
-    }
-
-    const generateUsers = async () => {
-      try {
-        await api.users.generateUsers(generateForm.value)
-        // Refresh data
-        await loadData()
-      } catch (err) {
-        console.error('Error generating users:', err)
-      }
-    }
-
-    const unlockVM = async (vmId) => {
-      try {
-        await api.admin.unlockVM(vmId)
-        // Refresh data
-        await loadData()
-      } catch (err) {
-        console.error('Error unlocking VM:', err)
-      }
-    }
-
-    const editUser = async (userId) => {
-      // TODO: Implement edit user modal
-      console.log('Edit user:', userId)
-    }
-
-    const deleteUser = async (userId) => {
-      if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
-        return
-      }
-      
-      try {
-        await api.users.delete(userId)
-        await loadData()
-      } catch (err) {
-        console.error('Error deleting user:', err)
-      }
-    }
-
-    const editCompetition = async (competitionId) => {
-      // TODO: Implement edit competition modal
-      console.log('Edit competition:', competitionId)
-    }
-
-    const deleteCompetition = async (competitionId) => {
-      if (!confirm('Are you sure you want to delete this competition? This action cannot be undone.')) {
-        return
-      }
-      
-      try {
-        await api.workshops.delete(competitionId)
-        await loadData()
-      } catch (err) {
-        console.error('Error deleting competition:', err)
-      }
-    }
-
-    const editTeam = async (teamId) => {
-      // TODO: Implement edit team modal
-      console.log('Edit team:', teamId)
-    }
-
-    const deleteTeam = async (teamId) => {
-      if (!confirm('Are you sure you want to delete this team? This action cannot be undone.')) {
-        return
-      }
-      
-      try {
-        await api.teams.delete(teamId)
-        await loadData()
-      } catch (err) {
-        console.error('Error deleting team:', err)
-      }
-    }
-
-    const editVM = async (vmId) => {
-      // TODO: Implement edit VM modal
-      console.log('Edit VM:', vmId)
-    }
-
-    const deleteVM = async (vmId) => {
-      if (!confirm('Are you sure you want to delete this VM? This action cannot be undone.')) {
-        return
-      }
-      
-      try {
-        await api.instances.delete(vmId)
-        await loadData()
-      } catch (err) {
-        console.error('Error deleting VM:', err)
       }
     }
 
@@ -659,34 +256,13 @@ export default {
       loading,
       error,
       selectedTab,
-      showAddModal,
-      users,
-      competitions,
-      teams,
-      vmObjects,
-      providers,
-      serviceAccounts,
-      lockedVMs,
-      ingestForm,
-      generateForm,
       navigationItems,
+      navigationSections,
       showAddButton,
       getCurrentTabName,
-      getStatusColor,
-      formatDate,
-      loadData,
       selectTab,
-      ingestVMs,
-      generateUsers,
-      unlockVM,
-      editUser,
-      deleteUser,
-      editCompetition,
-      deleteCompetition,
-      editTeam,
-      deleteTeam,
-      editVM,
-      deleteVM
+      handleAddClick,
+      loadData
     }
   }
 }

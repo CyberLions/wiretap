@@ -2,16 +2,18 @@
   <div class="min-h-screen flex items-center justify-center bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
     <div class="max-w-md w-full space-y-8">
       <div>
-        <div class="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-blue-600">
-          <svg class="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
+        <div class="mx-auto h-32 w-32 flex items-center justify-center rounded-full overflow-hidden">
+          <img 
+            src="@/assets/icons/icon.png" 
+            alt="Wiretap Logo" 
+            class="h-24 w-24 object-contain"
+          />
         </div>
         <h2 class="mt-6 text-center text-3xl font-extrabold text-white">
           Wiretap
         </h2>
         <p class="mt-2 text-center text-sm text-gray-400">
-          OpenStack VM Management Platform
+          CCSO Competition Platform
         </p>
       </div>
       
@@ -77,11 +79,9 @@
             <div class="mt-6">
               <button
                 @click="handleOpenIDLogin"
-                class="btn btn-secondary w-full"
+                class="btn btn-secondary w-full flex items-center justify-center"
               >
-                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                </svg>
+                <ArrowRightOnRectangleIcon class="w-5 h-5 mr-2 flex-shrink-0" />
                 Sign in with SSO
               </button>
             </div>
@@ -98,7 +98,7 @@
       
       <div class="text-center">
         <p class="text-gray-400 text-sm">
-          Need help? Contact your administrator
+          Need help? Contact your our tech team
         </p>
       </div>
     </div>
@@ -109,9 +109,13 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { ArrowRightOnRectangleIcon } from '@heroicons/vue/24/outline'
 
 export default {
   name: 'Login',
+  components: {
+    ArrowRightOnRectangleIcon
+  },
   setup() {
     const router = useRouter()
     const authStore = useAuthStore()

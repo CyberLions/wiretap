@@ -85,6 +85,14 @@
               </button>
               <button 
                 v-if="isAdmin"
+                class="btn btn-warning"
+                @click="syncInstances"
+                :disabled="syncing"
+              >
+                {{ syncing ? 'Syncing...' : 'Sync from OpenStack' }}
+              </button>
+              <button 
+                v-if="isAdmin"
                 class="btn btn-primary"
                 @click="bulkAssign"
               >
@@ -130,8 +138,8 @@
                     </span>
                   </td>
                   <td class="table-cell">{{ instance.power_state }}</td>
-                  <td class="table-cell">{{ instance.team_name || '-' }}</td>
-                  <td class="table-cell">{{ instance.user_name || '-' }}</td>
+                  <td class="table-cell">{{ instance.team_name || 'Unassigned' }}</td>
+                  <td class="table-cell">{{ instance.user_name || 'Unassigned' }}</td>
                   <td class="table-cell">
                     <div v-if="instance.ip_addresses" class="text-xs">
                       <div v-for="ip in parseIpAddresses(instance.ip_addresses)" :key="ip" class="text-gray-300">
@@ -171,6 +179,15 @@
         </div>
       </div>
     </div>
+
+    <!-- Bulk Assign Modal -->
+    <BulkAssignModal
+      :show="showBulkAssignModal"
+      :instances="instances"
+      @close="showBulkAssignModal = false"
+      @assigned="onBulkAssigned"
+      @error="(message) => error = message"
+    />
   </div>
 </template>
 
@@ -179,6 +196,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/services/api'
+import BulkAssignModal from '@/components/BulkAssignModal.vue'
 
 export default {
   name: 'Instances',
@@ -190,11 +208,14 @@ export default {
     const workshops = ref([])
     const loading = ref(true)
     const error = ref(null)
+    const syncing = ref(false)
     const filters = ref({
       workshop: '',
       status: '',
       powerState: ''
     })
+
+    const showBulkAssignModal = ref(false)
 
     const isAdmin = computed(() => authStore.isAdmin)
 
@@ -240,8 +261,24 @@ export default {
     }
 
     const bulkAssign = () => {
-      // TODO: Implement bulk assign modal
-      console.log('Bulk assign instances')
+      showBulkAssignModal.value = true
+    }
+
+    const onBulkAssigned = async () => {
+      await fetchInstances()
+    }
+
+    const syncInstances = async () => {
+      try {
+        syncing.value = true
+        await api.post('/instances/sync')
+        await fetchInstances() // Refresh the list after sync
+      } catch (err) {
+        console.error('Error syncing instances:', err)
+        error.value = 'Failed to sync instances from OpenStack'
+      } finally {
+        syncing.value = false
+      }
     }
 
     const deleteInstance = async (id) => {
@@ -302,12 +339,16 @@ export default {
       workshops,
       loading,
       error,
+      syncing,
       filters,
+      showBulkAssignModal,
       isAdmin,
       viewInstance,
       openConsole,
       refreshInstances,
       bulkAssign,
+      onBulkAssigned,
+      syncInstances,
       deleteInstance,
       applyFilters,
       canAccessInstance,

@@ -5,12 +5,16 @@
         <!-- Logo and Brand -->
         <div class="flex items-center">
           <router-link to="/" class="flex items-center group">
-            <div class="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300">
-              <span class="text-white font-bold text-lg">C</span>
+            <div class="w-14 h-14 rounded-lg flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300 overflow-hidden">
+              <img 
+                src="@/assets/icons/icon.png" 
+                alt="Wiretap Logo" 
+                class="w-12 h-12 object-contain"
+              />
             </div>
             <div class="ml-3">
               <h1 class="text-xl font-bold text-white group-hover:text-blue-400 transition-colors duration-200">
-                CCSO
+                Wiretap
               </h1>
             </div>
           </router-link>
@@ -36,7 +40,7 @@
         <!-- User Menu -->
         <div class="flex items-center space-x-4">
           <!-- User Avatar and Menu -->
-          <div class="relative">
+          <div class="relative user-menu">
             <button
               @click="isUserMenuOpen = !isUserMenuOpen"
               class="flex items-center space-x-2 text-gray-300 hover:text-blue-400 transition-colors duration-200"
@@ -60,13 +64,6 @@
                 <div class="px-4 py-2 text-sm text-gray-400 border-b border-gray-700">
                   Hello, {{ userName }}
                 </div>
-                <router-link
-                  to="/account"
-                  @click="isUserMenuOpen = false"
-                  class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors duration-200"
-                >
-                  Account Settings
-                </router-link>
                 <button
                   @click="handleLogout"
                   class="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors duration-200"
@@ -83,34 +80,14 @@
               @click="isMobileMenuOpen = !isMobileMenuOpen"
               class="text-gray-300 hover:text-blue-400 p-2 rounded-md transition-colors duration-200"
             >
-              <svg
+              <Bars3Icon
                 v-if="!isMobileMenuOpen"
                 class="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
-              </svg>
-              <svg
+              />
+              <XMarkIcon
                 v-else
                 class="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
+              />
             </button>
           </div>
         </div>
@@ -142,9 +119,14 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
+import { Bars3Icon, XMarkIcon } from '@heroicons/vue/24/outline'
 
 export default {
   name: 'Header',
+  components: {
+    Bars3Icon,
+    XMarkIcon
+  },
   setup() {
     const router = useRouter()
     const { user, logout } = useAuth()

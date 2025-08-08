@@ -5,7 +5,7 @@
     
     <!-- Content -->
     <div class="relative z-10">
-      <main class="pt-16">
+      <main :class="mainClass">
         <router-view v-slot="{ Component, route }">
           <transition 
             name="page" 
@@ -35,7 +35,11 @@ export default {
     const route = useRoute()
     
     const showHeader = computed(() => {
-      return !route.meta.hideHeader
+      return !route.meta?.hideHeader
+    })
+    
+    const mainClass = computed(() => {
+      return { 'pt-16': !route.meta?.hideHeader }
     })
     
     const onPageEnter = (el) => {
@@ -56,6 +60,7 @@ export default {
     
     return {
       showHeader,
+      mainClass,
       onPageEnter,
       onPageLeave
     }

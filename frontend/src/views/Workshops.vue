@@ -1,62 +1,34 @@
 <template>
-  <div class="min-h-screen bg-gray-900 text-white">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <!-- Header -->
-      <div class="mb-8">
-        <h1 class="text-3xl font-bold text-white mb-2">Workshops</h1>
-        <p class="text-gray-400">Manage OpenStack projects and their instances</p>
+  <div class="space-y-6">
+    <div class="bg-gray-800 rounded-lg shadow-lg border border-gray-700">
+      <div class="px-6 py-4 border-b border-gray-700">
+        <h3 class="text-lg font-medium text-white">Workshop Management</h3>
       </div>
-
-      <!-- Loading state -->
-      <div v-if="loading" class="flex justify-center items-center py-12">
-        <div class="spinner w-8 h-8"></div>
-        <span class="ml-3 text-gray-400">Loading workshops...</span>
-      </div>
-
-      <!-- Error state -->
-      <div v-else-if="error" class="bg-red-900 border border-red-700 rounded-lg p-4 mb-6">
-        <div class="flex">
-          <div class="flex-shrink-0">
-            <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-            </svg>
-          </div>
-          <div class="ml-3">
-            <h3 class="text-sm font-medium text-red-400">Error loading workshops</h3>
-            <div class="mt-2 text-sm text-red-300">{{ error }}</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Workshops list -->
-      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div 
-          v-for="workshop in workshops" 
-          :key="workshop.id"
-          class="card hover:shadow-xl transition-shadow duration-300 cursor-pointer"
-          @click="viewWorkshop(workshop.id)"
-        >
-          <div class="card-header">
-            <div class="flex items-center justify-between">
-              <h3 class="text-lg font-semibold text-white">{{ workshop.name }}</h3>
+      <div class="p-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div
+            v-for="workshop in workshops"
+            :key="workshop.id"
+            class="bg-gray-700 rounded-lg p-4 border border-gray-600 hover:shadow-lg transition-shadow duration-200 cursor-pointer"
+            @click="viewWorkshop(workshop.id)"
+          >
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-lg font-medium text-white">{{ workshop.name }}</h4>
               <span 
                 :class="[
-                  'status-badge',
+                  'status-badge text-xs',
                   workshop.enabled ? 'status-active' : 'status-inactive'
                 ]"
               >
                 {{ workshop.enabled ? 'Active' : 'Inactive' }}
               </span>
             </div>
-          </div>
-          
-          <div class="card-body">
-            <p class="text-gray-400 mb-4">{{ workshop.description || 'No description' }}</p>
+            <p class="text-gray-400 text-sm mb-4">{{ workshop.description || 'No description' }}</p>
             
             <div class="space-y-2 text-sm">
               <div class="flex justify-between">
                 <span class="text-gray-500">Provider:</span>
-                <span class="text-gray-300">{{ workshop.provider_name }}</span>
+                <span class="text-gray-300">{{ workshop.provider_name || 'Unknown' }}</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-gray-500">Project:</span>
@@ -64,93 +36,213 @@
               </div>
               <div class="flex justify-between">
                 <span class="text-gray-500">Teams:</span>
-                <span class="text-gray-300">{{ workshop.team_count || 0 }}</span>
+                <span class="text-gray-300">{{ workshop.teams?.length || 0 }}</span>
               </div>
               <div class="flex justify-between">
                 <span class="text-gray-500">Instances:</span>
                 <span class="text-gray-300">{{ workshop.instance_count || 0 }}</span>
               </div>
             </div>
-          </div>
-          
-          <div class="card-footer">
-            <div class="flex justify-between items-center">
+            
+            <div class="mt-4 flex justify-between items-center">
               <span class="text-xs text-gray-500">
                 Created {{ formatDate(workshop.created_at) }}
               </span>
-              <button 
-                class="btn btn-primary text-sm"
-                @click.stop="viewWorkshop(workshop.id)"
-              >
-                View Details
-              </button>
+              <div class="flex space-x-2">
+                <button 
+                  @click.stop="editWorkshop(workshop.id)"
+                  class="text-blue-400 hover:text-blue-300 text-sm"
+                >
+                  Edit
+                </button>
+                <button 
+                  @click.stop="deleteWorkshop(workshop.id)"
+                  class="text-red-400 hover:text-red-300 text-sm"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
-
-      <!-- Empty state -->
-      <div v-if="!loading && !error && workshops.length === 0" class="text-center py-12">
-        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-        </svg>
-        <h3 class="mt-2 text-sm font-medium text-gray-400">No workshops found</h3>
-        <p class="mt-1 text-sm text-gray-500">Get started by creating a new workshop.</p>
-      </div>
     </div>
+
+    <!-- Add Workshop Modal -->
+    <AddWorkshopModal
+      :show="showAddWorkshopModal"
+      :providers="providers"
+      @close="closeAddWorkshopModal"
+      @created="onWorkshopCreated"
+      @error="(message) => showToast(message, 'error')"
+    />
+
+    <!-- Edit Workshop Modal -->
+    <EditWorkshopModal
+      :show="showEditWorkshopModal"
+      :workshop="selectedWorkshop"
+      :providers="providers"
+      @close="closeEditWorkshopModal"
+      @updated="onWorkshopUpdated"
+      @error="(message) => showToast(message, 'error')"
+    />
+
+    <!-- Toast Notification -->
+    <Toast
+      :show="toast.show"
+      :message="toast.message"
+      :type="toast.type"
+      @close="closeToast"
+    />
   </div>
 </template>
 
 <script>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
 import api from '@/services/api'
+import AddWorkshopModal from '@/components/AddWorkshopModal.vue'
+import EditWorkshopModal from '@/components/EditWorkshopModal.vue'
+import Toast from '@/components/Toast.vue'
 
 export default {
   name: 'Workshops',
+  components: {
+    AddWorkshopModal,
+    EditWorkshopModal,
+    Toast
+  },
   setup() {
     const router = useRouter()
-    const authStore = useAuthStore()
     
     const workshops = ref([])
-    const loading = ref(true)
+    const providers = ref([])
+    const loading = ref(false)
     const error = ref(null)
+    
+    // Modal states
+    const showAddWorkshopModal = ref(false)
+    const showEditWorkshopModal = ref(false)
+    const selectedWorkshop = ref(null)
+    
+    // Toast notifications
+    const toast = ref({
+      show: false,
+      message: '',
+      type: 'success'
+    })
 
-    const fetchWorkshops = async () => {
+    const fetchData = async () => {
       try {
         loading.value = true
         error.value = null
         
-        const response = await api.get('/workshops')
-        workshops.value = response.data
+        const [workshopsResponse, providersResponse] = await Promise.all([
+          api.workshops.getAll(),
+          api.providers.getAll()
+        ])
+        
+        workshops.value = workshopsResponse.data
+        providers.value = providersResponse.data
       } catch (err) {
-        console.error('Error fetching workshops:', err)
-        error.value = err.response?.data?.message || 'Failed to load workshops'
+        console.error('Error loading workshops data:', err)
+        error.value = 'Failed to load data. Please try again.'
       } finally {
         loading.value = false
       }
     }
 
-    const viewWorkshop = (id) => {
-      router.push(`/workshops/${id}`)
+    const viewWorkshop = (workshopId) => {
+      router.push(`/workshops/${workshopId}`)
+    }
+
+    const editWorkshop = (workshopId) => {
+      const workshop = workshops.value.find(w => w.id === workshopId)
+      if (workshop) {
+        selectedWorkshop.value = workshop
+        showEditWorkshopModal.value = true
+      }
+    }
+
+    const deleteWorkshop = async (workshopId) => {
+      if (!confirm('Are you sure you want to delete this workshop? This will also delete all teams and generated users (@workshop.local) in this workshop. This action cannot be undone.')) {
+        return
+      }
+      
+      try {
+        const response = await api.workshops.delete(workshopId)
+        await fetchData()
+        showToast(response.data.message || 'Workshop deleted successfully', 'success')
+      } catch (err) {
+        console.error('Error deleting workshop:', err)
+        const errorMessage = err.response?.data?.error || 'Failed to delete workshop'
+        showToast(errorMessage, 'error')
+      }
+    }
+
+    const closeAddWorkshopModal = () => {
+      showAddWorkshopModal.value = false
+    }
+
+    const closeEditWorkshopModal = () => {
+      showEditWorkshopModal.value = false
+      selectedWorkshop.value = null
+    }
+
+    const onWorkshopCreated = () => {
+      fetchData()
+      showToast('Workshop created successfully', 'success')
+    }
+
+    const onWorkshopUpdated = () => {
+      fetchData()
+      showToast('Workshop updated successfully', 'success')
+    }
+
+    const showToast = (message, type = 'success') => {
+      toast.value = {
+        show: true,
+        message,
+        type
+      }
+      setTimeout(() => {
+        toast.value.show = false
+      }, 3000)
+    }
+
+    const closeToast = () => {
+      toast.value.show = false
     }
 
     const formatDate = (dateString) => {
+      if (!dateString) return 'Unknown'
       return new Date(dateString).toLocaleDateString()
     }
 
     onMounted(() => {
-      fetchWorkshops()
+      fetchData()
     })
 
     return {
       workshops,
+      providers,
       loading,
       error,
+      showAddWorkshopModal,
+      showEditWorkshopModal,
+      selectedWorkshop,
+      toast,
       viewWorkshop,
+      editWorkshop,
+      deleteWorkshop,
+      closeAddWorkshopModal,
+      closeEditWorkshopModal,
+      onWorkshopCreated,
+      onWorkshopUpdated,
+      showToast,
+      closeToast,
       formatDate
     }
   }
 }
-</script> 
+</script>

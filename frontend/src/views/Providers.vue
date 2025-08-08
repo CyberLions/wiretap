@@ -48,18 +48,44 @@
       </div>
     </div>
   </div>
+
+  <!-- Create Provider Modal -->
+  <CreateProviderModal
+    :show="showCreateProviderModal"
+    @close="showCreateProviderModal = false"
+    @created="onProviderCreated"
+    @error="(message) => error = message"
+  />
+
+  <!-- Edit Provider Modal -->
+  <EditProviderModal
+    :show="showEditProviderModal"
+    :provider="selectedProvider"
+    @close="showEditProviderModal = false"
+    @updated="onProviderUpdated"
+    @error="(message) => error = message"
+  />
 </template>
 
 <script>
 import { ref, onMounted } from 'vue'
 import api from '@/services/api'
+import CreateProviderModal from '@/components/CreateProviderModal.vue'
+import EditProviderModal from '@/components/EditProviderModal.vue'
 
 export default {
   name: 'Providers',
+  components: {
+    CreateProviderModal,
+    EditProviderModal
+  },
   setup() {
     const providers = ref([])
     const loading = ref(true)
     const error = ref(null)
+    const showCreateProviderModal = ref(false)
+    const showEditProviderModal = ref(false)
+    const selectedProvider = ref(null)
 
     const fetchProviders = async () => {
       try {
@@ -75,12 +101,16 @@ export default {
     }
 
     const createProvider = () => {
-      // TODO: Show create provider modal
-      alert('Create provider modal not implemented')
+      showCreateProviderModal.value = true
     }
+    
+
     const editProvider = (id) => {
-      // TODO: Show edit provider modal
-      alert('Edit provider modal not implemented')
+      const provider = providers.value.find(p => p.id === id)
+      if (provider) {
+        selectedProvider.value = provider
+        showEditProviderModal.value = true
+      }
     }
     const deleteProvider = async (id) => {
       if (!confirm('Are you sure you want to delete this provider?')) return
@@ -91,10 +121,31 @@ export default {
         alert('Failed to delete provider')
       }
     }
+
+    const onProviderCreated = async () => {
+      await fetchProviders()
+    }
+
+    const onProviderUpdated = async () => {
+      await fetchProviders()
+    }
+
     onMounted(() => {
       fetchProviders()
     })
-    return { providers, loading, error, createProvider, editProvider, deleteProvider }
+    return { 
+      providers, 
+      loading, 
+      error, 
+      showCreateProviderModal,
+      showEditProviderModal,
+      selectedProvider,
+      createProvider, 
+      editProvider, 
+      deleteProvider,
+      onProviderCreated,
+      onProviderUpdated
+    }
   }
 }
 </script>

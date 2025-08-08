@@ -68,9 +68,13 @@ const instances = {
   delete: (id) => api.delete(`/instances/${id}`),
   powerOn: (id) => api.post(`/instances/${id}/power-on`),
   powerOff: (id) => api.post(`/instances/${id}/power-off`),
-  reboot: (id, type = 'soft') => api.post(`/instances/${id}/reboot`, { type }),
+  reboot: (id, type = 'soft') => {
+    console.log(`API: Rebooting instance ${id} with type ${type}`)
+    return api.post(`/instances/${id}/reboot`, { type })
+  },
   getConsole: (id, type = 'vnc') => api.get(`/instances/${id}/console?type=${type}`),
-  getStatus: (id) => api.get(`/instances/${id}/status`)
+  getStatus: (id) => api.get(`/instances/${id}/status`),
+  bulkAssign: (data) => api.post('/instances/bulk-assign', data)
 }
 
 // Users
@@ -80,7 +84,8 @@ const users = {
   create: (data) => api.post('/users', data),
   update: (id, data) => api.put(`/users/${id}`, data),
   delete: (id) => api.delete(`/users/${id}`),
-  generateUsers: (data) => api.post('/users/generate', data)
+  generateUsers: (data) => api.post('/users/generate', data),
+  changePassword: (id, password) => api.put(`/users/${id}/password`, { password })
 }
 
 // Teams
@@ -89,7 +94,10 @@ const teams = {
   getById: (id) => api.get(`/teams/${id}`),
   create: (data) => api.post('/teams', data),
   update: (id, data) => api.put(`/teams/${id}`, data),
-  delete: (id) => api.delete(`/teams/${id}`)
+  delete: (id) => api.delete(`/teams/${id}`),
+  getUsers: (id) => api.get(`/teams/${id}/users`),
+  addUser: (id, userId) => api.post(`/teams/${id}/users`, { user_id: userId }),
+  removeUser: (id, userId) => api.delete(`/teams/${id}/users/${userId}`)
 }
 
 // Workshops (Competitions)
@@ -109,6 +117,8 @@ const providers = {
   update: (id, data) => api.put(`/providers/${id}`, data),
   delete: (id) => api.delete(`/providers/${id}`),
   testConnection: (id) => api.post(`/providers/${id}/test`),
+  getProjects: (id) => api.get(`/providers/${id}/projects`),
+  getInstances: (id, params = {}) => api.get(`/providers/${id}/instances`, { params }),
   ingestVMs: (id, data) => api.post(`/providers/${id}/ingest`, data)
 }
 

@@ -5,8 +5,6 @@ import { useAuth } from '@/composables/useAuth'
 // Import views
 import Login from '@/views/Login.vue'
 import Dashboard from '@/views/Dashboard.vue'
-import Workshops from '@/views/Workshops.vue'
-import WorkshopDetail from '@/views/WorkshopDetail.vue'
 import Teams from '@/views/Teams.vue'
 import TeamDetail from '@/views/TeamDetail.vue'
 import Instances from '@/views/Instances.vue'
@@ -48,18 +46,6 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
-    path: '/workshops',
-    name: 'Workshops',
-    component: Workshops,
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/workshops/:id',
-    name: 'WorkshopDetail',
-    component: WorkshopDetail,
-    meta: { requiresAuth: true }
-  },
-  {
     path: '/teams',
     name: 'Teams',
     component: Teams,
@@ -88,8 +74,7 @@ const routes = [
     name: 'Console',
     component: Console,
     meta: { 
-      requiresAuth: true,
-      hideHeader: true
+      requiresAuth: true
     }
   },
   {
@@ -98,23 +83,21 @@ const routes = [
     component: Admin,
     meta: { requiresAuth: true, requiresAdmin: true }
   },
-  {
-    path: '/admin/users',
-    name: 'Users',
-    component: Users,
-    meta: { requiresAuth: true, requiresAdmin: true }
-  },
-  {
-    path: '/admin/providers',
-    name: 'Providers',
-    component: Providers,
-    meta: { requiresAuth: true, requiresAdmin: true }
-  },
+
   {
     path: '/logs',
     name: 'Logs',
     component: Logs,
     meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    path: '/console/:id/fullscreen',
+    name: 'ConsoleFullscreen',
+    component: Console,
+    meta: { 
+      requiresAuth: true,
+      hideHeader: true
+    }
   },
   {
     path: '/:pathMatch(.*)*',

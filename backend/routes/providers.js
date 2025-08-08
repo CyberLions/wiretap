@@ -276,7 +276,7 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
     
     for (const field of updateFields) {
       if (req.body[field] !== undefined) {
-        await update('providers', 'id', id, field, req.body[field]);
+        await update('providers', field, req.body[field], 'id', id);
       }
     }
     
@@ -378,6 +378,99 @@ router.post('/:id/test', authenticateToken, requireAdmin, async (req, res) => {
 
 /**
  * @swagger
+ * /api/providers/{id}/instances:
+ *   get:
+ *     summary: Get instances from provider
+ *     tags: [Providers]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: project_name
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: OpenStack project name to filter instances
+ *     responses:
+ *       200:
+ *         description: List of instances from provider
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 instances:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       power_state:
+ *                         type: string
+ *       404:
+ *         description: Provider not found
+ */
+router.get('/:id/instances', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { project_name } = req.query;
+    
+    const provider = await search('providers', 'id', id);
+    if (!provider) {
+      return res.status(404).json({ error: 'Provider not found' });
+    }
+    
+    // Get instances from OpenStack
+    const { listInstancesForProject, getOpenStackProjectId } = require('../managers/openstack');
+    
+    let instances = [];
+    if (project_name) {
+      // Get instances for specific project
+      const projectId = await getOpenStackProjectId(provider, project_name);
+      if (projectId) {
+        instances = await listInstancesForProject(provider, project_name, projectId);
+      }
+    } else {
+      // Get instances from all projects
+      const { testOpenStackConnection } = require('../managers/openstack');
+      const result = await testOpenStackConnection(provider);
+      
+      if (result.success && result.projects) {
+        for (const project of result.projects) {
+          try {
+            const projectInstances = await listInstancesForProject(provider, project.name, project.id);
+            instances = instances.concat(projectInstances);
+          } catch (error) {
+            console.error(`Error getting instances for project ${project.name}:`, error);
+          }
+        }
+      }
+    }
+    
+    res.json({
+      success: true,
+      instances: instances
+    });
+  } catch (error) {
+    console.error('Error getting instances from provider:', error);
+    res.status(500).json({ error: 'Failed to get instances from provider' });
+  }
+});
+
+/**
+ * @swagger
  * /api/providers/{id}/ingest:
  *   post:
  *     summary: Ingest VMs from provider
@@ -411,7 +504,7 @@ router.post('/:id/test', authenticateToken, requireAdmin, async (req, res) => {
 router.post('/:id/ingest', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { team_id } = req.body;
+    const { team_id, instance_ids, project_name } = req.body;
     
     const provider = await search('providers', 'id', id);
     if (!provider) {
@@ -426,8 +519,16 @@ router.post('/:id/ingest', authenticateToken, requireAdmin, async (req, res) => 
     }
     
     // Ingest VMs from OpenStack
-    const { ingestVMsFromProvider } = require('../managers/openstack');
-    const result = await ingestVMsFromProvider(provider, team_id);
+    const { ingestVMsFromProvider, ingestSpecificVMsFromProvider } = require('../managers/openstack');
+    
+    let result;
+    if (instance_ids && instance_ids.length > 0) {
+      // Ingest specific VMs
+      result = await ingestSpecificVMsFromProvider(provider, team_id, instance_ids, project_name);
+    } else {
+      // Ingest all VMs (legacy behavior)
+      result = await ingestVMsFromProvider(provider, team_id);
+    }
     
     res.json({
       message: 'VMs ingested successfully',
@@ -437,6 +538,75 @@ router.post('/:id/ingest', authenticateToken, requireAdmin, async (req, res) => 
   } catch (error) {
     console.error('Error ingesting VMs:', error);
     res.status(500).json({ error: 'Failed to ingest VMs' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/providers/{id}/projects:
+ *   get:
+ *     summary: Get OpenStack projects for provider
+ *     tags: [Providers]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of OpenStack projects
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 projects:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *       404:
+ *         description: Provider not found
+ */
+router.get('/:id/projects', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const provider = await search('providers', 'id', id);
+    
+    if (!provider) {
+      return res.status(404).json({ error: 'Provider not found' });
+    }
+    
+    // Get OpenStack projects
+    const { testOpenStackConnection } = require('../managers/openstack');
+    const result = await testOpenStackConnection(provider);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        projects: result.projects || []
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: result.message || 'Failed to fetch projects'
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching provider projects:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch projects' 
+    });
   }
 });
 

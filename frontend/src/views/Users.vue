@@ -57,19 +57,45 @@
         </div>
       </div>
     </div>
+
+    <!-- Create User Modal -->
+    <AddUserModal
+      :show="showCreateUserModal"
+      @close="showCreateUserModal = false"
+      @created="onUserCreated"
+      @error="(message) => error = message"
+    />
+
+    <!-- Edit User Modal -->
+    <EditUserModal
+      :show="showEditUserModal"
+      :user="selectedUser"
+      @close="showEditUserModal = false"
+      @updated="onUserUpdated"
+      @error="(message) => error = message"
+    />
   </div>
 </template>
 
 <script>
 import { ref, onMounted } from 'vue'
 import api from '@/services/api'
+import AddUserModal from '@/components/AddUserModal.vue'
+import EditUserModal from '@/components/EditUserModal.vue'
 
 export default {
   name: 'Users',
+  components: {
+    AddUserModal,
+    EditUserModal
+  },
   setup() {
     const users = ref([])
     const loading = ref(true)
     const error = ref(null)
+    const showCreateUserModal = ref(false)
+    const showEditUserModal = ref(false)
+    const selectedUser = ref(null)
 
     const fetchUsers = async () => {
       try {
@@ -85,12 +111,14 @@ export default {
     }
 
     const createUser = () => {
-      // TODO: Show create user modal
-      alert('Create user modal not implemented')
+      showCreateUserModal.value = true
     }
     const editUser = (id) => {
-      // TODO: Show edit user modal
-      alert('Edit user modal not implemented')
+      const user = users.value.find(u => u.id === id)
+      if (user) {
+        selectedUser.value = user
+        showEditUserModal.value = true
+      }
     }
     const deleteUser = async (id) => {
       if (!confirm('Are you sure you want to delete this user?')) return
@@ -101,10 +129,31 @@ export default {
         alert('Failed to delete user')
       }
     }
+
+    const onUserCreated = async () => {
+      await fetchUsers()
+    }
+
+    const onUserUpdated = async () => {
+      await fetchUsers()
+    }
+
     onMounted(() => {
       fetchUsers()
     })
-    return { users, loading, error, createUser, editUser, deleteUser }
+    return { 
+      users, 
+      loading, 
+      error, 
+      showCreateUserModal,
+      showEditUserModal,
+      selectedUser,
+      createUser, 
+      editUser, 
+      deleteUser,
+      onUserCreated,
+      onUserUpdated
+    }
   }
 }
 </script>

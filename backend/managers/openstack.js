@@ -51,9 +51,6 @@ async function getAuthToken(provider) {
       }
     };
     
-    console.log('authData', authData);
-    console.log('authUrl', authUrl);
-    
     const response = await axios.post(
       `${authUrl}/auth/tokens`,
       authData,
@@ -212,8 +209,29 @@ async function listInstances(provider, projectId) {
  */
 async function getInstanceDetails(provider, instanceId) {
   try {
-    const instance = await makeRequest(provider, `/servers/${instanceId}`);
-    return instance.server;
+    // Get server details
+    const serverResponse = await makeRequest(provider, `/servers/${instanceId}`);
+    const server = serverResponse.server;
+    
+    // Extract IP addresses from the addresses field in server details
+    const ipAddresses = [];
+    if (server.addresses) {
+      for (const networkName in server.addresses) {
+        const networkAddresses = server.addresses[networkName];
+        if (Array.isArray(networkAddresses)) {
+          for (const addr of networkAddresses) {
+            if (addr.addr && addr.type === 'fixed') {
+              ipAddresses.push(addr.addr);
+            }
+          }
+        }
+      }
+    }
+    
+    return {
+      ...server,
+      ip_addresses: ipAddresses
+    };
   } catch (error) {
     console.error('Error getting instance details:', error);
     return null;
@@ -238,12 +256,17 @@ async function getInstanceStatus(provider, instance) {
     await update('instances', 'status', details.status, 'id', instance.id);
     await update('instances', 'power_state', details.power_state, 'id', instance.id);
     
+    // Update IP addresses in database
+    if (details.ip_addresses && details.ip_addresses.length > 0) {
+      await update('instances', 'ip_addresses', JSON.stringify(details.ip_addresses), 'id', instance.id);
+    }
+    
     return {
       status: details.status,
       power_state: details.power_state,
       flavor: details.flavor?.name,
       image: details.image?.name,
-      ip_addresses: details.addresses
+      ip_addresses: details.ip_addresses
     };
   } catch (error) {
     console.error('Error getting instance status:', error);
@@ -665,11 +688,133 @@ async function ingestVMsFromProvider(provider, teamId = null) {
 }
 
 /**
+ * Ingest specific VMs from OpenStack provider
+ */
+async function ingestSpecificVMsFromProvider(provider, teamId = null, instanceIds = [], projectName = null) {
+  try {
+    const { searchAll, insert, update } = require('../utils/db');
+    const { v4: uuidv4 } = require('uuid');
+    
+    let ingestedCount = 0;
+    const instances = [];
+    
+    console.log(`Starting specific VM ingestion for provider: ${provider.name}`);
+    console.log(`Instance IDs to ingest: ${instanceIds.join(', ')}`);
+    
+    // Get the workshop for this project
+    let workshop = null;
+    if (projectName) {
+      const workshops = await searchAll('workshops', ['openstack_project_name'], [projectName]);
+      if (workshops.length > 0) {
+        workshop = workshops[0];
+        console.log(`Found workshop: ${workshop.name} for project: ${projectName}`);
+      }
+    }
+    
+    if (!workshop) {
+      throw new Error('No workshop found for the specified project');
+    }
+    
+    // Get project ID
+    const projectId = await getOpenStackProjectId(provider, projectName);
+    if (!projectId) {
+      throw new Error(`Project not found: ${projectName}`);
+    }
+    
+    console.log(`Found project ID: ${projectId} for project: ${projectName}`);
+    
+    // List all instances in the project
+    const openstackInstances = await listInstancesForProject(provider, projectName, projectId);
+    console.log(`Found ${openstackInstances.length} instances in project ${projectName}`);
+    
+    // Filter instances to only include the requested ones
+    const filteredInstances = openstackInstances.filter(instance => 
+      instanceIds.includes(instance.id)
+    );
+    
+    console.log(`Filtered to ${filteredInstances.length} requested instances`);
+    
+    for (const openstackInstance of filteredInstances) {
+      try {
+        console.log(`Processing instance: ${openstackInstance.name} (ID: ${openstackInstance.id})`);
+        
+        // Check if instance already exists in database
+        const existingInstances = await searchAll('instances', ['openstack_id'], [openstackInstance.id]);
+        
+        if (existingInstances.length === 0) {
+          // Create new instance record
+          const instanceId = uuidv4();
+          const instanceData = {
+            id: instanceId,
+            name: openstackInstance.name,
+            openstack_id: openstackInstance.id,
+            workshop_id: workshop.id,
+            team_id: teamId,
+            user_id: null,
+            status: openstackInstance.status || 'UNKNOWN',
+            power_state: openstackInstance.power_state || 'UNKNOWN',
+            locked: false,
+            created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+            updated_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
+          };
+          
+          await insert('instances', Object.keys(instanceData), Object.values(instanceData));
+          ingestedCount++;
+          
+          console.log(`Created new instance: ${openstackInstance.name} in workshop: ${workshop.name}`);
+          
+          instances.push({
+            id: instanceId,
+            name: openstackInstance.name,
+            openstack_id: openstackInstance.id,
+            workshop_id: workshop.id,
+            status: openstackInstance.status,
+            power_state: openstackInstance.power_state
+          });
+        } else {
+          // Update existing instance with latest status and team assignment
+          const existingInstance = existingInstances[0];
+          await update('instances', 'status', openstackInstance.status, 'id', existingInstance.id);
+          await update('instances', 'power_state', openstackInstance.power_state, 'id', existingInstance.id);
+          
+          if (teamId) {
+            await update('instances', 'team_id', teamId, 'id', existingInstance.id);
+          }
+          
+          console.log(`Updated existing instance: ${openstackInstance.name} in workshop: ${workshop.name}`);
+          
+          instances.push({
+            id: existingInstance.id,
+            name: existingInstance.name,
+            openstack_id: existingInstance.openstack_id,
+            workshop_id: workshop.id,
+            status: openstackInstance.status,
+            power_state: openstackInstance.power_state
+          });
+        }
+      } catch (instanceError) {
+        console.error(`Error processing instance ${openstackInstance.id}:`, instanceError);
+      }
+    }
+    
+    console.log(`Specific VM ingestion completed. Total ingested: ${ingestedCount}, Total processed: ${instances.length}`);
+    
+    return {
+      ingested_count: ingestedCount,
+      instances: instances
+    };
+  } catch (error) {
+    console.error('Error ingesting specific VMs from provider:', error);
+    throw new Error('Failed to ingest specific VMs from provider');
+  }
+}
+
+/**
  * Update instance statuses (scheduled task)
  */
 async function updateInstanceStatuses() {
   try {
-    const { searchAll } = require('../utils/db');
+    const { searchAll, update } = require('../utils/db');
     
     // Get all providers
     const providers = await searchAll('providers', [], [], { orderBy: 'name' });
@@ -690,7 +835,7 @@ async function updateInstanceStatuses() {
             // List instances in project
             const instances = await listInstances(provider, projectId);
             
-            // Update database with instance statuses
+            // Update database with instance statuses and IP addresses
             for (const openstackInstance of instances) {
               const dbInstance = await searchAll('instances', ['openstack_id'], [openstackInstance.id]);
               
@@ -698,6 +843,25 @@ async function updateInstanceStatuses() {
                 const instance = dbInstance[0];
                 await update('instances', 'status', openstackInstance.status, 'id', instance.id);
                 await update('instances', 'power_state', openstackInstance.power_state, 'id', instance.id);
+                
+                // Extract and update IP addresses
+                const ipAddresses = [];
+                if (openstackInstance.addresses) {
+                  for (const networkName in openstackInstance.addresses) {
+                    const networkAddresses = openstackInstance.addresses[networkName];
+                    if (Array.isArray(networkAddresses)) {
+                      for (const addr of networkAddresses) {
+                        if (addr.addr && addr.type === 'fixed') {
+                          ipAddresses.push(addr.addr);
+                        }
+                      }
+                    }
+                  }
+                }
+                
+                if (ipAddresses.length > 0) {
+                  await update('instances', 'ip_addresses', JSON.stringify(ipAddresses), 'id', instance.id);
+                }
               }
             }
           } catch (workshopError) {
@@ -727,6 +891,7 @@ module.exports = {
   getConsoleUrl,
   getConsoleUrlForProject,
   ingestVMsFromProvider,
+  ingestSpecificVMsFromProvider,
   updateInstanceStatuses,
   getAuthTokenForProject,
   makeRequestForProject,

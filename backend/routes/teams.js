@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { search, searchAll, insert, update, deleteFrom } = require('../utils/db');
+const { search, searchAll, insert, update, deleteFrom, executeQuery } = require('../utils/db');
 const { authenticateToken, requireAdmin, canAccessWorkshop } = require('../middleware/auth');
 
 /**
@@ -31,11 +31,38 @@ router.get('/', authenticateToken, async (req, res) => {
       if (teamIds.length === 0) {
         teams = [];
       } else {
-        teams = await searchAll('teams', ['id'], teamIds, { orderBy: 'team_number' });
+        // Use custom query for multiple team IDs
+        const placeholders = teamIds.map(() => '?').join(',');
+        const query = `SELECT * FROM teams WHERE id IN (${placeholders}) ORDER BY team_number`;
+        teams = await executeQuery(query, teamIds);
       }
     }
+
+    // Add workshop information, member count, and instance count to each team
+    const teamsWithDetails = await Promise.all(
+      teams.map(async (team) => {
+        // Get workshop information
+        const workshop = await search('workshops', 'id', team.workshop_id);
+        
+        // Get member count
+        const userTeams = await searchAll('user_teams', ['team_id'], [team.id]);
+        const memberCount = userTeams.length;
+        
+        // Get instance count for this team
+        const instances = await searchAll('instances', ['team_id'], [team.id]);
+        const instanceCount = instances.length;
+        
+        return {
+          ...team,
+          workshop: workshop ? { id: workshop.id, name: workshop.name } : null,
+          workshop_name: workshop ? workshop.name : 'Unknown Workshop',
+          member_count: memberCount,
+          instance_count: instanceCount
+        };
+      })
+    );
     
-    res.json(teams);
+    res.json(teamsWithDetails);
   } catch (error) {
     console.error('Error fetching teams:', error);
     res.status(500).json({ error: 'Failed to fetch teams' });
@@ -79,7 +106,26 @@ router.get('/:id', authenticateToken, async (req, res) => {
       }
     }
     
-    res.json(team);
+    // Get instance count for this team
+    const instances = await searchAll('instances', ['team_id'], [id]);
+    const instanceCount = instances.length;
+    
+    // Get member count for this team
+    const userTeams = await searchAll('user_teams', ['team_id'], [id]);
+    const memberCount = userTeams.length;
+    
+    // Get workshop information
+    const workshop = await search('workshops', 'id', team.workshop_id);
+    
+    // Add instance count, member count, and workshop information to team data
+    const teamWithDetails = {
+      ...team,
+      instance_count: instanceCount,
+      member_count: memberCount,
+      workshop_name: workshop ? workshop.name : 'Unknown Workshop'
+    };
+    
+    res.json(teamWithDetails);
   } catch (error) {
     console.error('Error fetching team:', error);
     res.status(500).json({ error: 'Failed to fetch team' });
@@ -133,6 +179,14 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
       });
     }
     
+    // Validate and convert team_number to integer
+    const parsedTeamNumber = parseInt(team_number, 10);
+    if (isNaN(parsedTeamNumber) || parsedTeamNumber < 1) {
+      return res.status(400).json({ 
+        error: 'team_number must be a positive integer' 
+      });
+    }
+    
     // Verify workshop exists
     const workshop = await search('workshops', 'id', workshop_id);
     if (!workshop) {
@@ -140,7 +194,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
     }
     
     // Check if team number already exists in this workshop
-    const existingTeam = await searchAll('teams', ['workshop_id', 'team_number'], [workshop_id, team_number]);
+    const existingTeam = await searchAll('teams', ['workshop_id', 'team_number'], [workshop_id, parsedTeamNumber]);
     if (existingTeam.length > 0) {
       return res.status(409).json({ error: 'Team number already exists in this workshop' });
     }
@@ -151,7 +205,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
       name,
       description: description || '',
       workshop_id,
-      team_number,
+      team_number: parsedTeamNumber,
       enabled: true
     };
     
@@ -209,11 +263,30 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Team not found' });
     }
     
+    // Validate team_number if it's being updated
+    if (req.body.team_number !== undefined) {
+      const parsedTeamNumber = parseInt(req.body.team_number, 10);
+      if (isNaN(parsedTeamNumber) || parsedTeamNumber < 1) {
+        return res.status(400).json({ 
+          error: 'team_number must be a positive integer' 
+        });
+      }
+      
+      // Check if the new team number already exists in this workshop
+      const existingTeam = await searchAll('teams', ['workshop_id', 'team_number'], [team.workshop_id, parsedTeamNumber]);
+      if (existingTeam.length > 0 && existingTeam[0].id !== id) {
+        return res.status(409).json({ error: 'Team number already exists in this workshop' });
+      }
+      
+      // Update with parsed value
+      req.body.team_number = parsedTeamNumber;
+    }
+    
     const updateFields = ['name', 'description', 'team_number', 'enabled'];
     
     for (const field of updateFields) {
       if (req.body[field] !== undefined) {
-        await update('teams', 'id', id, field, req.body[field]);
+        await update('teams', field, req.body[field], 'id', id);
       }
     }
     
@@ -254,21 +327,55 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Team not found' });
     }
     
-    // Check if team has instances
+    // Check if team has instances and delete them
     const instances = await searchAll('instances', ['team_id'], [id]);
     if (instances.length > 0) {
-      return res.status(400).json({ 
-        error: 'Cannot delete team with instances. Reassign instances first.' 
-      });
+      console.log(`Found ${instances.length} instances associated with team ${id}, deleting them...`);
+      // Delete all instances associated with this team
+      for (const instance of instances) {
+        await deleteFrom('instances', ['id'], [instance.id]);
+        console.log(`Deleted instance: ${instance.name} (ID: ${instance.id})`);
+      }
+      console.log(`Successfully deleted ${instances.length} instances associated with team ${id}`);
     }
     
-    // Remove all user associations
+    // Get all users in this team
+    const userTeams = await searchAll('user_teams', ['team_id'], [id]);
+    const userIds = userTeams.map(ut => ut.user_id);
+    
+    // Find users with @workshop.local emails to delete
+    const usersToDelete = [];
+    if (userIds.length > 0) {
+      for (const userId of userIds) {
+        const user = await search('users', 'id', userId);
+        if (user && user.email && user.email.endsWith('@workshop.local')) {
+          usersToDelete.push(userId);
+        }
+      }
+    }
+    
+    // Delete users with @workshop.local emails
+    for (const userId of usersToDelete) {
+      await deleteFrom('users', ['id'], [userId]);
+    }
+    
+    // Remove all remaining user associations
     await deleteFrom('user_teams', ['team_id'], [id]);
     
     // Delete team
     await deleteFrom('teams', ['id'], [id]);
     
-    res.json({ message: 'Team deleted successfully' });
+    let message = 'Team deleted successfully.';
+    
+    if (instances.length > 0) {
+      message += ` ${instances.length} associated instance(s) were also deleted.`;
+    }
+    
+    if (usersToDelete.length > 0) {
+      message += ` ${usersToDelete.length} generated user(s) with @workshop.local emails were also deleted.`;
+    }
+    
+    res.json({ message });
   } catch (error) {
     console.error('Error deleting team:', error);
     res.status(500).json({ error: 'Failed to delete team' });
@@ -318,7 +425,10 @@ router.get('/:id/users', authenticateToken, async (req, res) => {
       return;
     }
     
-    const users = await searchAll('users', ['id'], userIds, { orderBy: 'username' });
+    // Use custom query for multiple user IDs
+    const placeholders = userIds.map(() => '?').join(',');
+    const query = `SELECT * FROM users WHERE id IN (${placeholders}) ORDER BY username`;
+    const users = await executeQuery(query, userIds);
     
     // Remove sensitive information
     const sanitizedUsers = users.map(user => {

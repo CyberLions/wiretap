@@ -1,155 +1,298 @@
 <template>
-  <div class="min-h-screen bg-gray-900 text-white">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <!-- Header -->
-      <div class="mb-8">
-        <h1 class="text-3xl font-bold text-white mb-2">Teams</h1>
-        <p class="text-gray-400">Manage teams and their members across workshops</p>
-      </div>
-
-      <!-- Loading state -->
-      <div v-if="loading" class="flex justify-center items-center py-12">
-        <div class="spinner w-8 h-8"></div>
-        <span class="ml-3 text-gray-400">Loading teams...</span>
-      </div>
-
-      <!-- Error state -->
-      <div v-else-if="error" class="bg-red-900 border border-red-700 rounded-lg p-4 mb-6">
-        <div class="flex">
-          <div class="flex-shrink-0">
-            <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-            </svg>
-          </div>
-          <div class="ml-3">
-            <h3 class="text-sm font-medium text-red-400">Error loading teams</h3>
-            <div class="mt-2 text-sm text-red-300">{{ error }}</div>
-          </div>
+  <div class="space-y-6">
+    <!-- Filters -->
+    <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+      <h3 class="text-lg font-medium text-white mb-4">Filters</h3>
+      <div class="flex flex-col md:flex-row gap-4">
+        <!-- Competition Dropdown -->
+        <div class="flex-1">
+          <label class="block text-sm font-medium text-gray-300 mb-2">Competition</label>
+          <select 
+            v-model="teamFilters.selectedCompetition" 
+            class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All Competitions</option>
+            <option v-for="competition in competitions" :key="competition.id" :value="competition.id">
+              {{ competition.name }}
+            </option>
+          </select>
         </div>
-      </div>
 
-      <!-- Teams list -->
-      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div 
-          v-for="team in teams" 
-          :key="team.id"
-          class="card hover:shadow-xl transition-shadow duration-300 cursor-pointer"
-          @click="viewTeam(team.id)"
-        >
-          <div class="card-header">
-            <div class="flex items-center justify-between">
-              <h3 class="text-lg font-semibold text-white">{{ team.name }}</h3>
-              <span 
-                :class="[
-                  'status-badge',
-                  team.enabled ? 'status-active' : 'status-inactive'
-                ]"
-              >
-                {{ team.enabled ? 'Active' : 'Inactive' }}
-              </span>
-            </div>
-          </div>
-          
-          <div class="card-body">
-            <p class="text-gray-400 mb-4">{{ team.description || 'No description' }}</p>
-            
-            <div class="space-y-2 text-sm">
-              <div class="flex justify-between">
-                <span class="text-gray-500">Workshop:</span>
-                <span class="text-gray-300">{{ team.workshop_name }}</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-gray-500">Team Number:</span>
-                <span class="text-gray-300">{{ team.team_number }}</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-gray-500">Members:</span>
-                <span class="text-gray-300">{{ team.member_count || 0 }}</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-gray-500">Instances:</span>
-                <span class="text-gray-300">{{ team.instance_count || 0 }}</span>
-              </div>
-            </div>
-          </div>
-          
-          <div class="card-footer">
-            <div class="flex justify-between items-center">
-              <span class="text-xs text-gray-500">
-                Created {{ formatDate(team.created_at) }}
-              </span>
-              <button 
-                class="btn btn-primary text-sm"
-                @click.stop="viewTeam(team.id)"
-              >
-                View Details
-              </button>
-            </div>
-          </div>
+        <!-- Search Input -->
+        <div class="flex-1">
+          <label class="block text-sm font-medium text-gray-300 mb-2">Search</label>
+          <input 
+            v-model="teamFilters.searchQuery" 
+            type="text" 
+            placeholder="Search teams..."
+            class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
         </div>
-      </div>
-
-      <!-- Empty state -->
-      <div v-if="!loading && !error && teams.length === 0" class="text-center py-12">
-        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-        </svg>
-        <h3 class="mt-2 text-sm font-medium text-gray-400">No teams found</h3>
-        <p class="mt-1 text-sm text-gray-500">Teams will appear here when created in workshops.</p>
       </div>
     </div>
+
+    <div class="bg-gray-800 rounded-lg shadow-lg border border-gray-700">
+      <div class="px-6 py-4 border-b border-gray-700">
+        <h3 class="text-lg font-medium text-white">Team Management</h3>
+      </div>
+      <div class="p-6">
+        <div class="overflow-x-auto">
+          <table class="table">
+            <thead class="table-header">
+              <tr>
+                <th>Team Name</th>
+                <th>Number</th>
+                <th>Competition</th>
+                <th>Members</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody class="table-body">
+              <tr v-for="team in filteredTeams" :key="team.id" class="table-row">
+                <td class="table-cell">{{ team.name }}</td>
+                <td class="table-cell">{{ team.team_number }}</td>
+                <td class="table-cell">{{ team.workshop?.name || 'Unknown' }}</td>
+                <td class="table-cell">{{ team.member_count || 0 }} members</td>
+                <td class="table-cell">
+                  <div class="flex space-x-2">
+                    <button @click="manageTeamMembers(team.id)" class="text-green-400 hover:text-green-300">Members</button>
+                    <button @click="editTeam(team.id)" class="text-blue-400 hover:text-blue-300">Edit</button>
+                    <button @click="deleteTeam(team.id)" class="text-red-400 hover:text-red-300">Delete</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Team Modal -->
+    <AddTeamModal
+      :show="showAddTeamModal"
+      :competitions="competitions"
+      @close="closeAddTeamModal"
+      @created="onTeamCreated"
+      @error="(message) => showToast(message, 'error')"
+    />
+
+    <!-- Edit Team Modal -->
+    <EditTeamModal
+      :show="showEditTeamModal"
+      :team="selectedTeam"
+      :competitions="competitions"
+      @close="closeEditTeamModal"
+      @updated="onTeamUpdated"
+      @error="(message) => showToast(message, 'error')"
+    />
+
+    <!-- Team Members Modal -->
+    <TeamMembersModal
+      :show="showTeamMembersModal"
+      :team="selectedTeam"
+      :allUsers="users"
+      @close="closeTeamMembersModal"
+      @updated="onTeamMembersUpdated"
+      @error="(message) => showToast(message, 'error')"
+    />
+
+    <!-- Toast Notification -->
+    <Toast
+      :show="toast.show"
+      :message="toast.message"
+      :type="toast.type"
+      @close="closeToast"
+    />
   </div>
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { ref, computed, onMounted } from 'vue'
 import api from '@/services/api'
+import AddTeamModal from '@/components/AddTeamModal.vue'
+import EditTeamModal from '@/components/EditTeamModal.vue'
+import TeamMembersModal from '@/components/TeamMembersModal.vue'
+import Toast from '@/components/Toast.vue'
 
 export default {
   name: 'Teams',
+  components: {
+    AddTeamModal,
+    EditTeamModal,
+    TeamMembersModal,
+    Toast
+  },
   setup() {
-    const router = useRouter()
-    const authStore = useAuthStore()
-    
     const teams = ref([])
-    const loading = ref(true)
+    const competitions = ref([])
+    const users = ref([])
+    const loading = ref(false)
     const error = ref(null)
+    
+    // Modal states
+    const showAddTeamModal = ref(false)
+    const showEditTeamModal = ref(false)
+    const showTeamMembersModal = ref(false)
+    const selectedTeam = ref(null)
+    
+    // Filters
+    const teamFilters = ref({
+      selectedCompetition: '',
+      searchQuery: ''
+    })
+    
+    // Toast notifications
+    const toast = ref({
+      show: false,
+      message: '',
+      type: 'success'
+    })
 
-    const fetchTeams = async () => {
+    const fetchData = async () => {
       try {
         loading.value = true
         error.value = null
         
-        const response = await api.get('/teams')
-        teams.value = response.data
+        const [teamsResponse, competitionsResponse, usersResponse] = await Promise.all([
+          api.teams.getAll(),
+          api.workshops.getAll(),
+          api.users.getAll()
+        ])
+        
+        teams.value = teamsResponse.data
+        competitions.value = competitionsResponse.data
+        users.value = usersResponse.data
       } catch (err) {
-        console.error('Error fetching teams:', err)
-        error.value = err.response?.data?.message || 'Failed to load teams'
+        console.error('Error loading teams data:', err)
+        error.value = 'Failed to load data. Please try again.'
       } finally {
         loading.value = false
       }
     }
 
-    const viewTeam = (id) => {
-      router.push(`/teams/${id}`)
+    // Computed property for filtered teams
+    const filteredTeams = computed(() => {
+      let filtered = teams.value
+
+      // Filter by competition
+      if (teamFilters.value.selectedCompetition) {
+        filtered = filtered.filter(team => team.workshop_id === teamFilters.value.selectedCompetition)
+      }
+
+      // Filter by search query
+      if (teamFilters.value.searchQuery) {
+        const query = teamFilters.value.searchQuery.toLowerCase()
+        filtered = filtered.filter(team => 
+          team.name.toLowerCase().includes(query) ||
+          (team.workshop?.name && team.workshop.name.toLowerCase().includes(query))
+        )
+      }
+
+      return filtered
+    })
+
+    const editTeam = (teamId) => {
+      const team = teams.value.find(t => t.id === teamId)
+      if (team) {
+        selectedTeam.value = team
+        showEditTeamModal.value = true
+      }
     }
 
-    const formatDate = (dateString) => {
-      return new Date(dateString).toLocaleDateString()
+    const deleteTeam = async (teamId) => {
+      if (!confirm('Are you sure you want to delete this team? This will also delete any associated instances and generated users (@workshop.local) in this team. This action cannot be undone.')) {
+        return
+      }
+      
+      try {
+        const response = await api.teams.delete(teamId)
+        await fetchData()
+        showToast(response.data.message || 'Team deleted successfully', 'success')
+      } catch (err) {
+        console.error('Error deleting team:', err)
+        const errorMessage = err.response?.data?.error || 'Failed to delete team'
+        showToast(errorMessage, 'error')
+      }
+    }
+
+    const manageTeamMembers = (teamId) => {
+      const team = teams.value.find(t => t.id === teamId)
+      if (team) {
+        selectedTeam.value = team
+        showTeamMembersModal.value = true
+      }
+    }
+
+    const closeAddTeamModal = () => {
+      showAddTeamModal.value = false
+    }
+
+    const closeEditTeamModal = () => {
+      showEditTeamModal.value = false
+      selectedTeam.value = null
+    }
+
+    const closeTeamMembersModal = () => {
+      showTeamMembersModal.value = false
+    }
+
+    const onTeamCreated = () => {
+      fetchData()
+      showToast('Team created successfully', 'success')
+    }
+
+    const onTeamUpdated = () => {
+      fetchData()
+      showToast('Team updated successfully', 'success')
+    }
+
+    const onTeamMembersUpdated = () => {
+      showToast('Team members updated successfully', 'success')
+    }
+
+    const showToast = (message, type = 'success') => {
+      toast.value = {
+        show: true,
+        message,
+        type
+      }
+      setTimeout(() => {
+        toast.value.show = false
+      }, 3000)
+    }
+
+    const closeToast = () => {
+      toast.value.show = false
     }
 
     onMounted(() => {
-      fetchTeams()
+      fetchData()
     })
 
     return {
       teams,
+      competitions,
+      users,
       loading,
       error,
-      viewTeam,
-      formatDate
+      teamFilters,
+      filteredTeams,
+      showAddTeamModal,
+      showEditTeamModal,
+      showTeamMembersModal,
+      selectedTeam,
+      toast,
+      editTeam,
+      deleteTeam,
+      manageTeamMembers,
+      closeAddTeamModal,
+      closeEditTeamModal,
+      closeTeamMembersModal,
+      onTeamCreated,
+      onTeamUpdated,
+      onTeamMembersUpdated,
+      showToast,
+      closeToast
     }
   }
 }

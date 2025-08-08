@@ -278,6 +278,34 @@
         </div>
       </div>
     </div>
+
+    <!-- Edit Team Modal -->
+    <EditTeamModal
+      :show="showEditTeamModal"
+      :team="team"
+      :competitions="[]"
+      @close="showEditTeamModal = false"
+      @updated="onTeamUpdated"
+      @error="(message) => error = message"
+    />
+
+    <!-- Add Member Modal -->
+    <AddMemberModal
+      :show="showAddMemberModal"
+      :team-id="route.params.id"
+      :existing-members="members"
+      @close="showAddMemberModal = false"
+      @added="onMemberAdded"
+      @error="(message) => error = message"
+    />
+
+    <!-- Bulk Create Users Modal -->
+    <BulkCreateUsersModal
+      :show="showBulkCreateUsersModal"
+      @close="showBulkCreateUsersModal = false"
+      @created="onUsersCreated"
+      @error="(message) => error = message"
+    />
   </div>
 </template>
 
@@ -286,9 +314,17 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/services/api'
+import EditTeamModal from '@/components/EditTeamModal.vue'
+import AddMemberModal from '@/components/AddMemberModal.vue'
+import BulkCreateUsersModal from '@/components/BulkCreateUsersModal.vue'
 
 export default {
   name: 'TeamDetail',
+  components: {
+    EditTeamModal,
+    AddMemberModal,
+    BulkCreateUsersModal
+  },
   setup() {
     const route = useRoute()
     const router = useRouter()
@@ -301,6 +337,9 @@ export default {
     const membersLoading = ref(false)
     const instancesLoading = ref(false)
     const error = ref(null)
+    const showEditTeamModal = ref(false)
+    const showAddMemberModal = ref(false)
+    const showBulkCreateUsersModal = ref(false)
 
     const isAdmin = computed(() => authStore.isAdmin)
 
@@ -352,13 +391,11 @@ export default {
     }
 
     const editTeam = () => {
-      // TODO: Implement edit team modal
-      console.log('Edit team')
+      showEditTeamModal.value = true
     }
 
     const addMember = () => {
-      // TODO: Implement add member modal
-      console.log('Add member')
+      showAddMemberModal.value = true
     }
 
     const removeMember = async (userId) => {
@@ -375,13 +412,24 @@ export default {
     }
 
     const bulkCreateUsers = () => {
-      // TODO: Implement bulk user creation modal
-      console.log('Bulk create users')
+      showBulkCreateUsersModal.value = true
     }
 
     const viewInstances = () => {
-      // TODO: Navigate to instances view filtered by team
-      console.log('View instances')
+      router.push(`/instances?team=${route.params.id}`)
+    }
+
+    const onTeamUpdated = async () => {
+      await fetchTeam()
+    }
+
+    const onMemberAdded = async () => {
+      await fetchMembers()
+    }
+
+    const onUsersCreated = async () => {
+      // Refresh members list after creating users
+      await fetchMembers()
     }
 
     const refreshInstances = async () => {
@@ -426,6 +474,9 @@ export default {
       membersLoading,
       instancesLoading,
       error,
+      showEditTeamModal,
+      showAddMemberModal,
+      showBulkCreateUsersModal,
       isAdmin,
       viewInstance,
       openConsole,
@@ -434,6 +485,9 @@ export default {
       removeMember,
       bulkCreateUsers,
       viewInstances,
+      onTeamUpdated,
+      onMemberAdded,
+      onUsersCreated,
       refreshInstances,
       canAccessInstance,
       getStatusClass,
