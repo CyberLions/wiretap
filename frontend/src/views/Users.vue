@@ -1,24 +1,26 @@
 <template>
-  <div class="min-h-screen bg-gray-900 text-white">
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="flex items-center justify-between mb-6">
-        <h1 class="text-3xl font-bold">Users</h1>
-        <button class="btn btn-primary" @click="createUser">Create User</button>
-      </div>
-      <div v-if="loading" class="flex justify-center items-center py-12">
-        <div class="spinner w-8 h-8"></div>
-        <span class="ml-3 text-gray-400">Loading users...</span>
-      </div>
-      <div v-else-if="error" class="bg-red-900 border border-red-700 rounded-lg p-4 mb-6">
-        <div class="flex items-center">
-          <svg class="h-6 w-6 text-red-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-1.414 1.414M6.343 17.657l-1.414-1.414M6.343 6.343l1.414-1.414M17.657 17.657l1.414-1.414M12 8v4m0 4h.01" />
-          </svg>
-          <span class="text-red-300">{{ error }}</span>
+  <div class="space-y-6">
+    <div class="bg-gray-800 rounded-lg shadow-lg border border-gray-700">
+      <div class="px-6 py-4 border-b border-gray-700">
+        <div class="flex items-center justify-between">
+          <h3 class="text-lg font-medium text-white">Users</h3>
+          <button class="btn btn-primary" @click="createUser">Create User</button>
         </div>
       </div>
-      <div v-else class="card">
-        <div class="card-body overflow-x-auto">
+      <div class="p-6">
+        <div v-if="loading" class="flex justify-center items-center py-12">
+          <div class="spinner w-8 h-8"></div>
+          <span class="ml-3 text-gray-400">Loading users...</span>
+        </div>
+        <div v-else-if="error" class="bg-red-900 border border-red-700 rounded-lg p-4 mb-6">
+          <div class="flex items-center">
+            <svg class="h-6 w-6 text-red-400 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-1.414 1.414M6.343 17.657l-1.414-1.414M6.343 6.343l1.414-1.414M17.657 17.657l1.414-1.414M12 8v4m0 4h.01" />
+            </svg>
+            <span class="text-red-300">{{ error }}</span>
+          </div>
+        </div>
+        <div v-else class="overflow-x-auto">
           <table class="table">
             <thead class="table-header">
               <tr>

@@ -329,7 +329,8 @@ router.post('/refresh', async (req, res) => {
     
     const token = authHeader.substring(7);
     
-    const decoded = jwt.verify(token, jwtConfig.secret);
+    // Allow refresh even if the access token is expired; we still verify signature
+    const decoded = jwt.verify(token, jwtConfig.secret, { ignoreExpiration: true });
     
     // Get user from database
     const user = await search('users', 'id', decoded.userId);

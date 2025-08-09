@@ -71,26 +71,26 @@ async function getSystemLogs(filters = {}) {
 }
 
 /**
- * Create system log
+ * Create system log (DB schema: id, user_id, type, action, details, ip_address, timestamp)
  */
 async function createSystemLog(logData) {
-  const { user_id, type, message, details, level = 'INFO' } = logData;
-  
+  const { user_id, type, action, details, ip_address } = logData;
+
   const logId = uuidv4();
   const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
-  
+
   const newLog = {
     id: logId,
     user_id: user_id || null,
-    type,
-    message,
+    type: type || 'system',
+    action: action || 'event',
     details: details || null,
-    level,
+    ip_address: ip_address || null,
     timestamp
   };
-  
+
   await insert('logs', Object.keys(newLog), Object.values(newLog));
-  
+
   return await search('logs', 'id', logId);
 }
 

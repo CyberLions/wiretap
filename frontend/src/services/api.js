@@ -23,17 +23,63 @@ api.interceptors.request.use(
   }
 )
 
-// Response interceptor to handle auth errors
+// Response interceptor to handle auth errors with one-time refresh attempt
+let isRefreshing = false
+let pendingRequestsQueue = []
+
 api.interceptors.response.use(
-  (response) => {
-    return response
-  },
-  (error) => {
-    if (error.response?.status === 401) {
-      // Clear token and redirect to login
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config
+    const status = error.response?.status
+    const isAuthRefreshCall = originalRequest?.url?.includes('/auth/refresh')
+    const isAuthLoginCall = originalRequest?.url?.includes('/auth/login')
+    const hasToken = !!localStorage.getItem('wiretap_token')
+
+    // If unauthorized, try refresh once
+    if (status === 401 && !originalRequest._retry && !isAuthRefreshCall && !isAuthLoginCall && hasToken) {
+      originalRequest._retry = true
+
+      // Queue the request while refreshing
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          pendingRequestsQueue.push({ resolve, reject })
+        })
+          .then((token) => {
+            originalRequest.headers['Authorization'] = `Bearer ${token}`
+            return api(originalRequest)
+          })
+          .catch((err) => Promise.reject(err))
+      }
+
+      isRefreshing = true
+      try {
+        const refreshResponse = await api.post('/auth/refresh')
+        const newToken = refreshResponse.data.token
+        if (newToken) {
+          localStorage.setItem('wiretap_token', newToken)
+          api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`
+          pendingRequestsQueue.forEach(({ resolve }) => resolve(newToken))
+          pendingRequestsQueue = []
+          isRefreshing = false
+          // Retry original request with new token
+          originalRequest.headers['Authorization'] = `Bearer ${newToken}`
+          return api(originalRequest)
+        }
+      } catch (refreshError) {
+        pendingRequestsQueue.forEach(({ reject }) => reject(refreshError))
+        pendingRequestsQueue = []
+        isRefreshing = false
+      }
+    }
+
+    // On failure or if not 401, clean up and redirect if unauthorized
+    if (status === 401) {
       localStorage.removeItem('wiretap_token')
+      delete api.defaults.headers.common['Authorization']
       window.location.href = '/login'
     }
+
     return Promise.reject(error)
   }
 )

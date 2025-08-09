@@ -192,8 +192,18 @@
                   <div class="terminal-content">
                     <!-- Matrix rain effect -->
                     <div class="matrix-rain">
-                      <div v-for="i in 20" :key="i" class="matrix-column" :style="{ left: (i * 5) + '%', animationDelay: (i * 0.1) + 's' }">
-                        <div v-for="j in 15" :key="j" class="matrix-char" :style="{ animationDelay: (j * 0.1) + 's' }">
+                      <div
+                        v-for="col in matrixColumns"
+                        :key="col.id"
+                        class="matrix-column"
+                        :style="{ left: col.left + '%', animationDelay: col.delay + 's', animationDuration: col.duration + 's' }"
+                      >
+                        <div
+                          v-for="char in col.chars"
+                          :key="char.id"
+                          class="matrix-char"
+                          :style="{ animationDelay: char.delay + 's' }"
+                        >
                           {{ getRandomChar() }}
                         </div>
                       </div>
@@ -201,25 +211,34 @@
                     
                     <!-- Connection status lines -->
                     <div class="connection-lines">
-                      <div class="connection-line" style="animation-delay: 0.5s">
-                        <span class="text-green-500">$</span> <span class="text-white">connecting_to_vm</span>
+                      <div class="connection-line" style="--chars: 18; --delay: 0.2s; --duration: 1.08s;">
+                        <span class="typewriter">
+                          <span class="text-green-500">$</span> <span class="text-white">connecting_to_vm</span>
+                        </span>
                       </div>
-                      <div class="connection-line" style="animation-delay: 1s">
-                        <span class="text-green-500">$</span> <span class="text-white">establishing_secure_tunnel</span>
+                      <div class="connection-line" style="--chars: 28; --delay: 1.48s; --duration: 1.68s;">
+                        <span class="typewriter">
+                          <span class="text-green-500">$</span> <span class="text-white">establishing_secure_tunnel</span>
+                        </span>
                       </div>
-                      <div class="connection-line" style="animation-delay: 1.5s">
-                        <span class="text-green-500">$</span> <span class="text-white">authenticating_credentials</span>
+                      <div class="connection-line" style="--chars: 28; --delay: 3.36s; --duration: 1.68s;">
+                        <span class="typewriter">
+                          <span class="text-green-500">$</span> <span class="text-white">authenticating_credentials</span>
+                        </span>
                       </div>
-                      <div class="connection-line" style="animation-delay: 2s">
-                        <span class="text-green-500">$</span> <span class="text-white">initializing_console_session</span>
+                      <div class="connection-line" style="--chars: 30; --delay: 5.24s; --duration: 1.8s;">
+                        <span class="typewriter">
+                          <span class="text-green-500">$</span> <span class="text-white">initializing_console_session</span>
+                        </span>
                       </div>
-                      <div class="connection-line" style="animation-delay: 2.5s">
-                        <span class="text-green-500">$</span> <span class="text-white">loading_virtual_machine</span>
+                      <div class="connection-line" style="--chars: 25; --delay: 7.24s; --duration: 1.5s;">
+                        <span class="typewriter">
+                          <span class="text-green-500">$</span> <span class="text-white">loading_virtual_machine</span>
+                        </span>
                       </div>
                     </div>
                     
-                    <!-- Cursor blink -->
-                    <div class="cursor-blink">█</div>
+                    
                   </div>
                 </div>
                 
@@ -385,6 +404,29 @@ export default {
       const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン'
       return chars[Math.floor(Math.random() * chars.length)]
     }
+
+    const createMatrixData = (numCols = 20, numChars = 15) => {
+      const columnWidthPercent = 100 / numCols
+      return Array.from({ length: numCols }, (_, i) => {
+        const baseLeft = i * columnWidthPercent
+        const jitter = (Math.random() - 0.5) * columnWidthPercent * 0.4
+        const duration = 2.5 + Math.random() * 2.5 // 2.5s - 5s
+        const delay = -Math.random() * duration // negative delay to start mid-fall
+        const chars = Array.from({ length: numChars }, (_, j) => ({
+          id: j,
+          delay: Math.random() * 2 // randomize glow phase per char
+        }))
+        return {
+          id: i,
+          left: Math.max(0, Math.min(100, baseLeft + jitter)),
+          duration,
+          delay,
+          chars
+        }
+      })
+    }
+
+    const matrixColumns = ref(createMatrixData())
 
     const loadInstance = async () => {
       loading.value = true
@@ -589,6 +631,8 @@ export default {
       toast,
       showToast,
       closeToast
+      ,
+      matrixColumns
     }
   }
 }
@@ -639,7 +683,8 @@ iframe {
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: 1;
+  z-index: -1;
+  pointer-events: none;
 }
 
 .matrix-column {
@@ -679,14 +724,20 @@ iframe {
   font-family: 'Courier New', monospace;
   font-size: 12px;
   line-height: 1.4;
+  position: relative;
+  z-index: 2;
+  background: rgba(0, 0, 0, 0.85);
+  padding: 8px 10px;
+  border-radius: 6px;
+  display: inline-block;
 }
 
 .connection-line {
   opacity: 0;
-  animation: typewriter 0.5s ease-in-out forwards;
+  animation: fade-in 0.2s ease-out forwards var(--delay, 0s);
 }
 
-@keyframes typewriter {
+@keyframes fade-in {
   0% {
     opacity: 0;
     transform: translateX(-10px);
@@ -697,27 +748,49 @@ iframe {
   }
 }
 
-/* Cursor Blink */
-.cursor-blink {
-  color: #00ff00;
-  animation: blink 1s infinite;
-  font-family: 'Courier New', monospace;
+.typewriter {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  width: 0;
+  animation: typing steps(var(--chars)) var(--duration, 1.5s) forwards var(--delay, 0s);
 }
 
-@keyframes blink {
-  0%, 50% {
-    opacity: 1;
-  }
-  51%, 100% {
-    opacity: 0;
-  }
+.typewriter::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 2px;
+  height: 1em;
+  background: rgba(0, 255, 0, 0.9);
+  animation: caret-blink 0.8s steps(1) infinite var(--delay, 0s),
+             caret-hide 0s linear forwards calc(var(--delay, 0s) + var(--duration, 1.5s));
 }
+
+@keyframes typing {
+  from { width: 0; }
+  to { width: calc(var(--chars) * 1ch); }
+}
+
+@keyframes caret-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+@keyframes caret-hide {
+  to { opacity: 0; }
+}
+
+/* Removed cursor blink */
 
 /* Rocket Animation */
 .rocket-container {
   position: relative;
   height: 120px;
   margin: 20px 0;
+  z-index: 3;
 }
 
 .rocket {
@@ -725,7 +798,7 @@ iframe {
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
-  animation: rocket-launch 4s ease-in-out infinite;
+  animation: rocket-launch 4s linear infinite;
 }
 
 .rocket-body {

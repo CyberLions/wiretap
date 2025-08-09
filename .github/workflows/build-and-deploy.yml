@@ -5,7 +5,7 @@ on:
     branches: [ "main" , "staging" ]
 
 jobs:
-  build-cms:
+  build-backend:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -25,23 +25,23 @@ jobs:
       uses: docker/login-action@v3
       with:
         registry: registry.psuccso.org
-        username: robot$ccso-site+github
+        username: robot$wiretap+github
         password: ${{ secrets.DOCKER_PASSWORD }}
 
     - name: Generate API Tag Names
       run: |
         echo "${{ steps.extract_branch.outputs.branch }}"
         if [ ${{ steps.extract_branch.outputs.branch }} = "main" ]; then
-          echo "TAG_LATEST_CMS=ccso-cms:latest" >> $GITHUB_ENV
-          echo "TAG_COMMIT_CMS=ccso-cms:$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "TAG_LATEST_BACKEND=backend:latest" >> $GITHUB_ENV
+          echo "TAG_COMMIT_BACKEND=backend:$(git rev-parse --short HEAD)" >> $GITHUB_ENV
         elif [ ${{ steps.extract_branch.outputs.branch }} = "staging" ]; then
-          echo "TAG_LATEST_CMS=ccso-cms-stage:latest" >> $GITHUB_ENV
-          echo "TAG_COMMIT_CMS=ccso-cms-stage:$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "TAG_LATEST_BACKEND=backend-stage:latest" >> $GITHUB_ENV
+          echo "TAG_COMMIT_BACKEND=backend-stage:$(git rev-parse --short HEAD)" >> $GITHUB_ENV
         else
           exit 0
         fi
 
-    - name: Build and push CMS
+    - name: Build and push Backend
       uses: docker/build-push-action@v6
       with:
         context: ./backend
@@ -49,12 +49,12 @@ jobs:
         file: ./backend/.docker/Dockerfile
         push: true
         tags: |
-          registry.psuccso.org/ccso-site/${{ env.TAG_LATEST_CMS }}
-          registry.psuccso.org/ccso-site/${{ env.TAG_COMMIT_CMS }}
-        cache-from: type=registry,ref=registry.psuccso.org/ccso-site/${{ env.TAG_LATEST_CMS }}
+          registry.psuccso.org/wiretap/${{ env.TAG_LATEST_BACKEND }}
+          registry.psuccso.org/wiretap/${{ env.TAG_COMMIT_BACKEND }}
+        cache-from: type=registry,ref=registry.psuccso.org/wiretap/${{ env.TAG_LATEST_BACKEND }}
         cache-to: type=inline
 
-  build-website:
+  build-frontend:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -74,23 +74,23 @@ jobs:
       uses: docker/login-action@v3
       with:
         registry: registry.psuccso.org
-        username: robot$ccso-site+github
+        username: robot$wiretap+github
         password: ${{ secrets.DOCKER_PASSWORD }}
 
     - name: Generate Website Tag Names
       run: |
         echo "${{ steps.extract_branch.outputs.branch }}"
         if [ ${{ steps.extract_branch.outputs.branch }} = "main" ]; then
-          echo "TAG_LATEST_WEBSITE=ccso-site:latest" >> $GITHUB_ENV
-          echo "TAG_COMMIT_WEBSITE=ccso-site:$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "TAG_LATEST_FRONTEND=frontend:latest" >> $GITHUB_ENV
+          echo "TAG_COMMIT_FRONTEND=frontend:$(git rev-parse --short HEAD)" >> $GITHUB_ENV
         elif [ ${{ steps.extract_branch.outputs.branch }} = "staging" ]; then
-          echo "TAG_LATEST_WEBSITE=ccso-site-stage:latest" >> $GITHUB_ENV
-          echo "TAG_COMMIT_WEBSITE=ccso-site-stage:$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "TAG_LATEST_FRONTEND=frontend-stage:latest" >> $GITHUB_ENV
+          echo "TAG_COMMIT_FRONTEND=frontend-stage:$(git rev-parse --short HEAD)" >> $GITHUB_ENV
         else
           exit 0
         fi
 
-    - name: Build and push Website
+    - name: Build and push Frontend
       uses: docker/build-push-action@v6
       with:
         context: ./frontend
@@ -98,13 +98,13 @@ jobs:
         file: ./frontend/.docker/Dockerfile
         push: true
         tags: |
-          registry.psuccso.org/ccso-site/${{ env.TAG_LATEST_WEBSITE }}
-          registry.psuccso.org/ccso-site/${{ env.TAG_COMMIT_WEBSITE }}
-        cache-from: type=registry,ref=registry.psuccso.org/ccso-site/${{ env.TAG_LATEST_WEBSITE }}
+          registry.psuccso.org/wiretap/${{ env.TAG_LATEST_FRONTEND }}
+          registry.psuccso.org/wiretap/${{ env.TAG_COMMIT_FRONTEND }}
+        cache-from: type=registry,ref=registry.psuccso.org/wiretap/${{ env.TAG_LATEST_FRONTEND }}
         cache-to: type=inline
 
   deploy-rancher:
-    needs: [build-cms, build-website]
+    needs: [build-backend, build-frontend]
     runs-on: ubuntu-latest
     steps:
     - name: Extract branch name
@@ -138,11 +138,11 @@ jobs:
 
         echo "${{ steps.extract_branch.outputs.branch }}"
         if [ ${{ steps.extract_branch.outputs.branch }} = "main" ]; then
-            namespace=ccso-site
+            namespace=wiretap
             redeploy "backend"
             redeploy "frontend"
         elif [ ${{ steps.extract_branch.outputs.branch }} = "staging" ]; then
-            namespace=ccso-site-staging
+            namespace=wiretap-staging
             redeploy "backend"
             redeploy "frontend"
         else

@@ -98,7 +98,7 @@
       
       <div class="text-center">
         <p class="text-gray-400 text-sm">
-          Need help? Contact your our tech team
+          Need help? Contact our tech team
         </p>
       </div>
     </div>
