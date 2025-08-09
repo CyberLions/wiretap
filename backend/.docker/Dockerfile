@@ -1,32 +1,20 @@
-# Creating multi-stage build for production
-FROM node:22-alpine AS build
-RUN apk update && apk add --no-cache openssl build-base gcc autoconf automake zlib-dev libpng-dev vips-dev git > /dev/null 2>&1
-ARG NODE_ENV=production
-ENV NODE_ENV=${NODE_ENV}
+# Use the official Node.js 14 image as the base image
+FROM node:22.1-bullseye
 
-WORKDIR /opt/
-COPY package.json yarn.lock ./
-RUN yarn global add node-gyp
-RUN yarn config set network-timeout 600000 -g && yarn install --production
-RUN npx @yek-plus/strapi-crack
-ENV PATH=/opt/node_modules/.bin:$PATH
-WORKDIR /opt/app
+# Set the working directory inside the container
+WORKDIR /usr/src/app
+
+# Copy package.json and package-lock.json to the working directory
+COPY package*.json ./
+
+# Install project dependencies
+RUN npm install
+
+# Copy the rest of the project files to the working directory
 COPY . .
-RUN yarn build
 
-# Creating final production image
-FROM node:22-alpine
-RUN apk add --no-cache vips-dev
-ENV NODE_ENV=production
-ENV NODE_ENV=${NODE_ENV}
-WORKDIR /opt/
-COPY --from=build /opt/node_modules ./node_modules
-COPY --from=build /opt/license.txt ./
-WORKDIR /opt/app
-COPY --from=build /opt/app ./
-ENV PATH=/opt/node_modules/.bin:$PATH
-
-RUN chown -R node:node /opt/app
+# Expose a port (if your application needs it)
 EXPOSE 3000
 
-CMD ["yarn", "start"]
+# Start the application
+CMD [ "node", "index.js" ]
