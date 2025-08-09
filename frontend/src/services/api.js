@@ -1,8 +1,14 @@
 import axios from 'axios'
 
+function resolveApiBaseUrl() {
+  const fromWindow = typeof window !== 'undefined' && window.ENV ? (window.ENV.VITE_API_URL || window.ENV.VITE_BACKEND_URL) : undefined
+  const fromImportMeta = (typeof import.meta !== 'undefined' && import.meta.env) ? (import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL) : undefined
+  return fromWindow || fromImportMeta || 'http://localhost:3000/api'
+}
+
 // Create axios instance
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000/api',
+  baseURL: resolveApiBaseUrl(),
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'

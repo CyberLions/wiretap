@@ -447,16 +447,24 @@ router.get('/:id/instances', authenticateToken, requireAdmin, async (req, res) =
       const { testOpenStackConnection } = require('../managers/openstack');
       const result = await testOpenStackConnection(provider);
       
-      if (result.success && result.projects) {
-        for (const project of result.projects) {
+    if (result.success && result.projects) {
+      const limit = parseInt(process.env.PROJECT_LIST_CONCURRENCY || '5', 10);
+      const queue = [...result.projects];
+      const workers = Array.from({ length: Math.max(1, limit) }, async () => {
+        while (queue.length > 0) {
+          const project = queue.shift();
           try {
             const projectInstances = await listInstancesForProject(provider, project.name, project.id);
-            instances = instances.concat(projectInstances);
+            if (Array.isArray(projectInstances) && projectInstances.length > 0) {
+              instances.push(...projectInstances);
+            }
           } catch (error) {
             console.error(`Error getting instances for project ${project.name}:`, error);
           }
         }
-      }
+      });
+      await Promise.all(workers);
+    }
     }
     
     res.json({

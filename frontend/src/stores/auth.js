@@ -3,6 +3,12 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/services/api'
 
+function resolveApiBaseUrl() {
+  const fromWindow = typeof window !== 'undefined' && window.ENV ? (window.ENV.VITE_API_URL || window.ENV.VITE_BACKEND_URL) : undefined
+  const fromImportMeta = (typeof import.meta !== 'undefined' && import.meta.env) ? (import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL) : undefined
+  return fromWindow || fromImportMeta || 'http://localhost:3000/api'
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const router = useRouter()
   
@@ -44,7 +50,8 @@ export const useAuthStore = defineStore('auth', () => {
   }
   
   const loginWithOpenID = () => {
-    window.location.href = `${import.meta.env.VITE_API_URL}/auth/openid/login`
+    const backendBase = resolveApiBaseUrl()
+    window.location.href = `${backendBase}/auth/openid/login`
   }
   
   const handleAuthCallback = async (tokenFromUrl) => {

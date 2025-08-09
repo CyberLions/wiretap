@@ -1,15 +1,62 @@
 const axios = require('axios');
+const http = require('http');
+const https = require('https');
 const { openstackConfig } = require('../utils/config');
 const { update } = require('../utils/db');
 
 // OpenStack authentication cache
 const authCache = new Map();
 
+// Small cache for Keystone project ID lookups (per provider + project name)
+const projectIdCache = new Map();
+const PROJECT_ID_TTL_MS = parseInt(process.env.OPENSTACK_PROJECT_ID_TTL_MS || '', 10) || (5 * 60 * 1000);
+
+// Shared Axios instance with keep-alive agents
+const axiosInstance = axios.create({
+  timeout: openstackConfig.connectionTimeout,
+  httpAgent: new http.Agent({ keepAlive: true, maxSockets: 50, keepAliveMsecs: 10_000 }),
+  httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 50, keepAliveMsecs: 10_000 })
+});
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isTransientNetworkError(error) {
+  if (!error) return false;
+  const code = error.code || error.errno;
+  const transientCodes = [
+    'ECONNRESET',
+    'ETIMEDOUT',
+    'EAI_AGAIN',
+    'ENOTFOUND',
+    'EHOSTUNREACH',
+    'ECONNREFUSED',
+    'EPIPE',
+    'ESOCKETTIMEDOUT'
+  ];
+  return transientCodes.includes(code);
+}
+
 /**
  * Get OpenStack authentication token and service catalog
  */
+function getProviderAuthCacheKey(provider) {
+  return `${provider.id}_${provider.auth_url}`;
+}
+
+function getProjectAuthCacheKey(provider, projectName) {
+  return `${provider.id}_${provider.auth_url}_${projectName}`;
+}
+
+function invalidateAuthCache(cacheKey) {
+  if (authCache.has(cacheKey)) {
+    authCache.delete(cacheKey);
+  }
+}
+
 async function getAuthToken(provider) {
-  const cacheKey = `${provider.id}_${provider.auth_url}`;
+  const cacheKey = getProviderAuthCacheKey(provider);
   
   // Check cache first
   if (authCache.has(cacheKey)) {
@@ -51,7 +98,7 @@ async function getAuthToken(provider) {
       }
     };
     
-    const response = await axios.post(
+    const response = await axiosInstance.post(
       `${authUrl}/auth/tokens`,
       authData,
       {
@@ -86,41 +133,65 @@ async function getAuthToken(provider) {
  * Make authenticated request to OpenStack API
  */
 async function makeRequest(provider, endpoint, method = 'GET', data = null) {
-  const authData = await getAuthToken(provider);
-  
-  try {
-    // Find compute service endpoint from service catalog
-    const computeService = authData.serviceCatalog.find(service => service.type === 'compute');
-    if (!computeService) {
-      throw new Error('Compute service not found in service catalog');
+  const region = provider.region_name || openstackConfig.defaultRegion;
+  const maxRetries = Number.isFinite(openstackConfig.maxRetries) ? openstackConfig.maxRetries : 3;
+  const cacheKey = getProviderAuthCacheKey(provider);
+
+  let lastError;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const authData = await getAuthToken(provider);
+
+      const computeService = authData.serviceCatalog.find(service => service.type === 'compute');
+      if (!computeService) {
+        throw new Error('Compute service not found in service catalog');
+      }
+
+      const computeEndpoint = computeService.endpoints.find(ep => ep.interface === 'public' && ep.region === region);
+      if (!computeEndpoint) {
+        throw new Error(`Compute endpoint not found for region: ${region}`);
+      }
+
+      const response = await axiosInstance({
+        method,
+        url: `${computeEndpoint.url}${endpoint}`,
+        headers: {
+          'X-Auth-Token': authData.token,
+          'Content-Type': 'application/json',
+          'OpenStack-API-Version': 'compute 2.8'
+        },
+        data
+      });
+
+      return response.data;
+    } catch (error) {
+      const status = error?.response?.status;
+      // Handle 401 by invalidating token and retrying once per attempt chain
+      if (status === 401) {
+        invalidateAuthCache(cacheKey);
+        lastError = error;
+        if (attempt < maxRetries) {
+          await sleep(150 * (attempt + 1));
+          continue;
+        }
+      }
+
+      // Retry transient or 5xx errors with backoff
+      if (status >= 500 || isTransientNetworkError(error)) {
+        lastError = error;
+        if (attempt < maxRetries) {
+          const backoffMs = Math.min(2000, 300 * Math.pow(2, attempt));
+          await sleep(backoffMs);
+          continue;
+        }
+      }
+
+      // Non-retryable
+      throw new Error(`OpenStack API request failed: ${error.message || String(error)}`);
     }
-    
-    const region = provider.region_name || openstackConfig.defaultRegion;
-    const computeEndpoint = computeService.endpoints.find(endpoint => 
-      endpoint.interface === 'public' && endpoint.region === region
-    );
-    
-    if (!computeEndpoint) {
-      throw new Error(`Compute endpoint not found for region: ${region}`);
-    }
-    
-    const response = await axios({
-      method,
-      url: `${computeEndpoint.url}${endpoint}`,
-      headers: {
-        'X-Auth-Token': authData.token,
-        'Content-Type': 'application/json',
-        'OpenStack-API-Version': 'compute 2.8'
-      },
-      data,
-      timeout: openstackConfig.connectionTimeout
-    });
-    
-    return response.data;
-  } catch (error) {
-    console.error('OpenStack API error:', error.message);
-    throw new Error(`OpenStack API request failed: ${error.message}`);
   }
+
+  throw new Error(`OpenStack API request failed after retries: ${lastError?.message || 'Unknown error'}`);
 }
 
 /**
@@ -137,7 +208,7 @@ async function testOpenStackConnection(provider) {
       : `${provider.auth_url}/${identityVersion}`;
     
     const authData = await getAuthToken(provider);
-    const response = await axios.get(
+    const response = await axiosInstance.get(
       `${authUrl}/projects`,
       {
         headers: {
@@ -166,13 +237,19 @@ async function testOpenStackConnection(provider) {
  */
 async function getOpenStackProjectId(provider, projectName) {
   try {
+    // Check memoized cache first
+    const projCacheKey = `${provider.id}:${provider.auth_url}:${projectName}`;
+    const cached = projectIdCache.get(projCacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.projectId;
+    }
     const identityVersion = provider.identity_version || 'v3';
     const authUrl = provider.auth_url.endsWith('/') 
       ? `${provider.auth_url}${identityVersion}`
       : `${provider.auth_url}/${identityVersion}`;
     
     const authData = await getAuthToken(provider);
-    const response = await axios.get(
+    const response = await axiosInstance.get(
       `${authUrl}/projects`,
       {
         headers: {
@@ -184,7 +261,11 @@ async function getOpenStackProjectId(provider, projectName) {
     );
     
     const project = response.data.projects.find(p => p.name === projectName);
-    return project ? project.id : null;
+    const projectId = project ? project.id : null;
+
+    // Store in cache with TTL
+    projectIdCache.set(projCacheKey, { projectId, expiresAt: Date.now() + PROJECT_ID_TTL_MS });
+    return projectId;
   } catch (error) {
     console.error('Error getting project ID:', error);
     return null;
@@ -196,6 +277,7 @@ async function getOpenStackProjectId(provider, projectName) {
  */
 async function listInstances(provider, projectId) {
   try {
+    // Note: consider adding pagination if large projects are expected
     const instances = await makeRequest(provider, `/servers/detail?project_id=${projectId}`);
     return instances.servers || [];
   } catch (error) {
@@ -448,7 +530,7 @@ async function getConsoleUrlForProject(provider, projectName, instance, consoleT
  * Get OpenStack authentication token for a specific project
  */
 async function getAuthTokenForProject(provider, projectName) {
-  const cacheKey = `${provider.id}_${provider.auth_url}_${projectName}`;
+  const cacheKey = getProjectAuthCacheKey(provider, projectName);
   
   // Check cache first
   if (authCache.has(cacheKey)) {
@@ -493,7 +575,7 @@ async function getAuthTokenForProject(provider, projectName) {
     console.log(`Authenticating for project: ${projectName}`);
     console.log('authUrl', authUrl);
     
-    const response = await axios.post(
+    const response = await axiosInstance.post(
       `${authUrl}/auth/tokens`,
       authData,
       {
@@ -528,41 +610,62 @@ async function getAuthTokenForProject(provider, projectName) {
  * Make authenticated request to OpenStack API for a specific project
  */
 async function makeRequestForProject(provider, projectName, endpoint, method = 'GET', data = null) {
-  const authData = await getAuthTokenForProject(provider, projectName);
-  
-  try {
-    // Find compute service endpoint from service catalog
-    const computeService = authData.serviceCatalog.find(service => service.type === 'compute');
-    if (!computeService) {
-      throw new Error('Compute service not found in service catalog');
+  const region = provider.region_name || openstackConfig.defaultRegion;
+  const maxRetries = Number.isFinite(openstackConfig.maxRetries) ? openstackConfig.maxRetries : 3;
+  const cacheKey = getProjectAuthCacheKey(provider, projectName);
+
+  let lastError;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const authData = await getAuthTokenForProject(provider, projectName);
+
+      const computeService = authData.serviceCatalog.find(service => service.type === 'compute');
+      if (!computeService) {
+        throw new Error('Compute service not found in service catalog');
+      }
+
+      const computeEndpoint = computeService.endpoints.find(ep => ep.interface === 'public' && ep.region === region);
+      if (!computeEndpoint) {
+        throw new Error(`Compute endpoint not found for region: ${region}`);
+      }
+
+      const response = await axiosInstance({
+        method,
+        url: `${computeEndpoint.url}${endpoint}`,
+        headers: {
+          'X-Auth-Token': authData.token,
+          'Content-Type': 'application/json',
+          'OpenStack-API-Version': 'compute 2.8'
+        },
+        data
+      });
+
+      return response.data;
+    } catch (error) {
+      const status = error?.response?.status;
+      if (status === 401) {
+        invalidateAuthCache(cacheKey);
+        lastError = error;
+        if (attempt < maxRetries) {
+          await sleep(150 * (attempt + 1));
+          continue;
+        }
+      }
+
+      if (status >= 500 || isTransientNetworkError(error)) {
+        lastError = error;
+        if (attempt < maxRetries) {
+          const backoffMs = Math.min(2000, 300 * Math.pow(2, attempt));
+          await sleep(backoffMs);
+          continue;
+        }
+      }
+
+      throw new Error(`OpenStack API request failed: ${error.message || String(error)}`);
     }
-    
-    const region = provider.region_name || openstackConfig.defaultRegion;
-    const computeEndpoint = computeService.endpoints.find(endpoint => 
-      endpoint.interface === 'public' && endpoint.region === region
-    );
-    
-    if (!computeEndpoint) {
-      throw new Error(`Compute endpoint not found for region: ${region}`);
-    }
-    
-    const response = await axios({
-      method,
-      url: `${computeEndpoint.url}${endpoint}`,
-      headers: {
-        'X-Auth-Token': authData.token,
-        'Content-Type': 'application/json',
-        'OpenStack-API-Version': 'compute 2.8'
-      },
-      data,
-      timeout: openstackConfig.connectionTimeout
-    });
-    
-    return response.data;
-  } catch (error) {
-    console.error('OpenStack API error:', error.message);
-    throw new Error(`OpenStack API request failed: ${error.message}`);
   }
+
+  throw new Error(`OpenStack API request failed after retries: ${lastError?.message || 'Unknown error'}`);
 }
 
 /**
