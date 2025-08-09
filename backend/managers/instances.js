@@ -203,13 +203,13 @@ async function createInstance(instanceData) {
     const openstackInstance = await getInstanceDetails(provider, openstack_id);
     
     if (openstackInstance) {
-      await update('instances', 'status', openstackInstance.status, 'id', instanceId);
-      await update('instances', 'power_state', openstackInstance.power_state, 'id', instanceId);
+              await update('instances', 'status', openstackInstance.status, 'id', [instanceId]);
+        await update('instances', 'power_state', openstackInstance.power_state, 'id', [instanceId]);
       
       // Extract IP addresses
       const ipAddresses = extractIpAddresses(openstackInstance);
       if (ipAddresses.length > 0) {
-        await update('instances', 'ip_addresses', JSON.stringify(ipAddresses), 'id', instanceId);
+        await update('instances', 'ip_addresses', JSON.stringify(ipAddresses), 'id', [instanceId]);
       }
     }
   } catch (syncError) {
@@ -233,7 +233,7 @@ async function updateInstance(id, updateData) {
   
   for (const field of updateFields) {
     if (updateData[field] !== undefined) {
-      await update('instances', field, updateData[field], 'id', id);
+              await update('instances', field, updateData[field], 'id', [id]);
     }
   }
   
@@ -298,14 +298,14 @@ async function syncInstance(id) {
   
   if (openstackInstance) {
     // Update instance with OpenStack data
-    await update('instances', 'status', openstackInstance.status, 'id', instance.id);
-    await update('instances', 'power_state', openstackInstance.power_state, 'id', instance.id);
+    await update('instances', 'status', openstackInstance.status, 'id', [instance.id]);
+    await update('instances', 'power_state', openstackInstance.power_state, 'id', [instance.id]);
     
     // Extract IP addresses from addresses field
     const ipAddresses = extractIpAddresses(openstackInstance);
     
     if (ipAddresses.length > 0) {
-      await update('instances', 'ip_addresses', JSON.stringify(ipAddresses), 'id', instance.id);
+      await update('instances', 'ip_addresses', JSON.stringify(ipAddresses), 'id', [instance.id]);
     }
     
     // Get updated instance data
@@ -355,14 +355,14 @@ async function syncAllInstances() {
       
       if (openstackInstance) {
         // Update instance with OpenStack data
-        await update('instances', 'status', openstackInstance.status, 'id', instance.id);
-        await update('instances', 'power_state', openstackInstance.power_state, 'id', instance.id);
+        await update('instances', 'status', openstackInstance.status, 'id', [instance.id]);
+        await update('instances', 'power_state', openstackInstance.power_state, 'id', [instance.id]);
         
         // Update IP addresses - extract from addresses field
         const ipAddresses = extractIpAddresses(openstackInstance);
         
         if (ipAddresses.length > 0) {
-          await update('instances', 'ip_addresses', JSON.stringify(ipAddresses), 'id', instance.id);
+          await update('instances', 'ip_addresses', JSON.stringify(ipAddresses), 'id', [instance.id]);
           console.log(`Updated IP addresses for instance ${instance.id}:`, ipAddresses);
         }
         
@@ -401,8 +401,8 @@ async function canUserAccessInstance(userId, instanceId) {
   
   // User can access if they're on the team that owns the instance
   if (instance.team_id) {
-    const userTeam = await search('user_teams', ['user_id', 'team_id'], [userId, instance.team_id]);
-    if (userTeam) {
+    const userTeam = await searchAll('user_teams', ['user_id', 'team_id'], [userId, instance.team_id]);
+    if (userTeam && userTeam.length > 0) {
       return true;
     }
   }

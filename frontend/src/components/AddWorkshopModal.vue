@@ -63,6 +63,27 @@
           </div>
         </div>
 
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Workshop Start (optional)</label>
+            <input
+              v-model="form.lockout_start"
+              type="datetime-local"
+              class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <p class="text-xs text-gray-400 mt-1">Time will be interpreted in your local timezone</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Workshop End (optional)</label>
+            <input
+              v-model="form.lockout_end"
+              type="datetime-local"
+              class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <p class="text-xs text-gray-400 mt-1">Time will be interpreted in your local timezone</p>
+          </div>
+        </div>
+
         <div class="flex justify-end space-x-3 pt-4">
           <button
             type="button"
@@ -111,7 +132,9 @@ export default {
       name: '',
       description: '',
       provider_id: '',
-      openstack_project_name: ''
+      openstack_project_name: '',
+      lockout_start: '',
+      lockout_end: ''
     })
 
     const resetForm = () => {
@@ -119,7 +142,9 @@ export default {
         name: '',
         description: '',
         provider_id: '',
-        openstack_project_name: ''
+        openstack_project_name: '',
+        lockout_start: '',
+        lockout_end: ''
       }
       projects.value = []
       projectError.value = ''

@@ -74,25 +74,25 @@
         </div>
 
         <!-- Dynamic Content Based on Selected Tab -->
-        <div v-else>
+          <div v-else>
           <!-- Providers Tab -->
-          <div v-if="selectedTab === 'providers'">
-            <Providers />
+            <div v-if="selectedTab === 'providers'">
+              <Providers ref="providersRef" />
           </div>
 
           <!-- Users Tab -->
-          <div v-else-if="selectedTab === 'users'">
-            <Users />
+            <div v-else-if="selectedTab === 'users'">
+              <Users ref="usersRef" />
           </div>
 
           <!-- Workshops Tab -->
-          <div v-else-if="selectedTab === 'workshops'">
-            <Workshops />
+            <div v-else-if="selectedTab === 'workshops'">
+              <Workshops ref="workshopsRef" />
           </div>
 
           <!-- Teams Tab -->
-          <div v-else-if="selectedTab === 'teams'">
-            <Teams />
+            <div v-else-if="selectedTab === 'teams'">
+              <Teams ref="teamsRef" />
           </div>
 
           <!-- VM Objects Tab -->
@@ -101,8 +101,8 @@
           </div>
 
           <!-- Service Accounts Tab -->
-          <div v-else-if="selectedTab === 'service-accounts'">
-            <ServiceAccounts />
+            <div v-else-if="selectedTab === 'service-accounts'">
+              <ServiceAccounts ref="serviceAccountsRef" />
           </div>
 
           <!-- Ingest VMs Tab -->
@@ -178,7 +178,7 @@ export default {
   setup() {
     const loading = ref(false)
     const error = ref(null)
-    const selectedTab = ref('providers')
+    const selectedTab = ref('users')
 
     const navigationItems = [
       // User Management
@@ -200,7 +200,8 @@ export default {
     ]
 
     const showAddButton = computed(() => {
-      return ['users', 'workshops', 'teams', 'vm-objects', 'providers', 'service-accounts'].includes(selectedTab.value)
+      // Only show Add button for tabs that support create flows
+      return ['users', 'providers', 'workshops', 'teams', 'service-accounts'].includes(selectedTab.value)
     })
 
     const navigationSections = computed(() => {
@@ -228,9 +229,33 @@ export default {
       selectedTab.value = tabId
     }
 
+    // Refs to child components to trigger their create modals
+    const providersRef = ref(null)
+    const usersRef = ref(null)
+    const workshopsRef = ref(null)
+    const teamsRef = ref(null)
+    const serviceAccountsRef = ref(null)
+
     const handleAddClick = () => {
-      // This will be handled by the individual components
-      console.log('Add clicked for:', selectedTab.value)
+      switch (selectedTab.value) {
+        case 'users':
+          usersRef.value?.createUser && usersRef.value.createUser()
+          break
+        case 'providers':
+          providersRef.value?.createProvider && providersRef.value.createProvider()
+          break
+        case 'workshops':
+          workshopsRef.value?.openAddWorkshop && workshopsRef.value.openAddWorkshop()
+          break
+        case 'teams':
+          teamsRef.value?.openAddTeam && teamsRef.value.openAddTeam()
+          break
+        case 'service-accounts':
+          serviceAccountsRef.value?.openAddServiceAccount && serviceAccountsRef.value.openAddServiceAccount()
+          break
+        default:
+          break
+      }
     }
 
     const loadData = async () => {
@@ -261,6 +286,11 @@ export default {
       showAddButton,
       getCurrentTabName,
       selectTab,
+      providersRef,
+      usersRef,
+      workshopsRef,
+      teamsRef,
+      serviceAccountsRef,
       handleAddClick,
       loadData
     }

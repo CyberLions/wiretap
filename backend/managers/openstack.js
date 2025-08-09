@@ -39,6 +39,31 @@ function isTransientNetworkError(error) {
 }
 
 /**
+ * If provider has proxy_through_host set, rewrite the request URL host to the proxy
+ * while preserving the original Host header for upstream routing. This allows
+ * routing through a DNS/IP (e.g., pritunl-proxy.pritunl) without changing
+ * service discovery semantics.
+ */
+function buildProxiedRequest(urlString, provider) {
+  if (!provider?.proxy_through_host) {
+    return { url: urlString, headers: {} };
+  }
+  try {
+    const original = new URL(urlString);
+    const originalHostHeader = original.host; // includes port if present
+    // Replace only the hostname; preserve protocol and port
+    original.hostname = provider.proxy_through_host;
+    return {
+      url: original.toString(),
+      headers: { Host: originalHostHeader }
+    };
+  } catch (e) {
+    // If parsing fails, fallback to original
+    return { url: urlString, headers: {} };
+  }
+}
+
+/**
  * Get OpenStack authentication token and service catalog
  */
 function getProviderAuthCacheKey(provider) {
@@ -98,12 +123,14 @@ async function getAuthToken(provider) {
       }
     };
     
+    const { url: authTargetUrl, headers: proxyHeaders } = buildProxiedRequest(`${authUrl}/auth/tokens`, provider);
     const response = await axiosInstance.post(
-      `${authUrl}/auth/tokens`,
+      authTargetUrl,
       authData,
       {
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...proxyHeaders
         },
         timeout: openstackConfig.connectionTimeout
       }
@@ -152,13 +179,15 @@ async function makeRequest(provider, endpoint, method = 'GET', data = null) {
         throw new Error(`Compute endpoint not found for region: ${region}`);
       }
 
+      const { url: targetUrl, headers: proxyHeaders } = buildProxiedRequest(`${computeEndpoint.url}${endpoint}`, provider);
       const response = await axiosInstance({
         method,
-        url: `${computeEndpoint.url}${endpoint}`,
+        url: targetUrl,
         headers: {
           'X-Auth-Token': authData.token,
           'Content-Type': 'application/json',
-          'OpenStack-API-Version': 'compute 2.8'
+          'OpenStack-API-Version': 'compute 2.8',
+          ...proxyHeaders
         },
         data
       });
@@ -208,12 +237,14 @@ async function testOpenStackConnection(provider) {
       : `${provider.auth_url}/${identityVersion}`;
     
     const authData = await getAuthToken(provider);
+    const { url: targetUrl, headers: proxyHeaders } = buildProxiedRequest(`${authUrl}/projects`, provider);
     const response = await axiosInstance.get(
-      `${authUrl}/projects`,
+      targetUrl,
       {
         headers: {
           'X-Auth-Token': authData.token,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...proxyHeaders
         },
         timeout: openstackConfig.connectionTimeout
       }
@@ -249,12 +280,14 @@ async function getOpenStackProjectId(provider, projectName) {
       : `${provider.auth_url}/${identityVersion}`;
     
     const authData = await getAuthToken(provider);
+    const { url: targetUrl, headers: proxyHeaders } = buildProxiedRequest(`${authUrl}/projects`, provider);
     const response = await axiosInstance.get(
-      `${authUrl}/projects`,
+      targetUrl,
       {
         headers: {
           'X-Auth-Token': authData.token,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...proxyHeaders
         },
         timeout: openstackConfig.connectionTimeout
       }
@@ -335,12 +368,12 @@ async function getInstanceStatus(provider, instance) {
     }
     
     // Update database with latest status
-    await update('instances', 'status', details.status, 'id', instance.id);
-    await update('instances', 'power_state', details.power_state, 'id', instance.id);
+    await update('instances', 'status', details.status, 'id', [instance.id]);
+    await update('instances', 'power_state', details.power_state, 'id', [instance.id]);
     
     // Update IP addresses in database
     if (details.ip_addresses && details.ip_addresses.length > 0) {
-      await update('instances', 'ip_addresses', JSON.stringify(details.ip_addresses), 'id', instance.id);
+      await update('instances', 'ip_addresses', JSON.stringify(details.ip_addresses), 'id', [instance.id]);
     }
     
     return {
@@ -369,7 +402,7 @@ async function powerOnInstance(provider, instance) {
     });
     
     // Update database
-    await update('instances', 'power_state', 'RUNNING', 'id', instance.id);
+    await update('instances', 'power_state', 'RUNNING', 'id', [instance.id]);
     
     return true;
   } catch (error) {
@@ -388,7 +421,7 @@ async function powerOffInstance(provider, instance) {
     });
     
     // Update database
-    await update('instances', 'power_state', 'SHUTDOWN', 'id', instance.id);
+    await update('instances', 'power_state', 'SHUTDOWN', 'id', [instance.id]);
     
     return true;
   } catch (error) {
@@ -575,12 +608,14 @@ async function getAuthTokenForProject(provider, projectName) {
     console.log(`Authenticating for project: ${projectName}`);
     console.log('authUrl', authUrl);
     
+    const { url: authTargetUrl, headers: proxyHeaders } = buildProxiedRequest(`${authUrl}/auth/tokens`, provider);
     const response = await axiosInstance.post(
-      `${authUrl}/auth/tokens`,
+      authTargetUrl,
       authData,
       {
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...proxyHeaders
         },
         timeout: openstackConfig.connectionTimeout
       }
@@ -629,13 +664,15 @@ async function makeRequestForProject(provider, projectName, endpoint, method = '
         throw new Error(`Compute endpoint not found for region: ${region}`);
       }
 
+      const { url: targetUrl, headers: proxyHeaders } = buildProxiedRequest(`${computeEndpoint.url}${endpoint}`, provider);
       const response = await axiosInstance({
         method,
-        url: `${computeEndpoint.url}${endpoint}`,
+        url: targetUrl,
         headers: {
           'X-Auth-Token': authData.token,
           'Content-Type': 'application/json',
-          'OpenStack-API-Version': 'compute 2.8'
+          'OpenStack-API-Version': 'compute 2.8',
+          ...proxyHeaders
         },
         data
       });
@@ -755,8 +792,8 @@ async function ingestVMsFromProvider(provider, teamId = null) {
             } else {
               // Update existing instance with latest status
               const existingInstance = existingInstances[0];
-              await update('instances', 'status', openstackInstance.status, 'id', existingInstance.id);
-              await update('instances', 'power_state', openstackInstance.power_state, 'id', existingInstance.id);
+              await update('instances', 'status', openstackInstance.status, 'id', [existingInstance.id]);
+              await update('instances', 'power_state', openstackInstance.power_state, 'id', [existingInstance.id]);
               
               console.log(`Updated existing instance: ${openstackInstance.name} in workshop: ${workshop.name}`);
               
@@ -877,11 +914,11 @@ async function ingestSpecificVMsFromProvider(provider, teamId = null, instanceId
         } else {
           // Update existing instance with latest status and team assignment
           const existingInstance = existingInstances[0];
-          await update('instances', 'status', openstackInstance.status, 'id', existingInstance.id);
-          await update('instances', 'power_state', openstackInstance.power_state, 'id', existingInstance.id);
+          await update('instances', 'status', openstackInstance.status, 'id', [existingInstance.id]);
+          await update('instances', 'power_state', openstackInstance.power_state, 'id', [existingInstance.id]);
           
           if (teamId) {
-            await update('instances', 'team_id', teamId, 'id', existingInstance.id);
+            await update('instances', 'team_id', teamId, 'id', [existingInstance.id]);
           }
           
           console.log(`Updated existing instance: ${openstackInstance.name} in workshop: ${workshop.name}`);
@@ -935,8 +972,12 @@ async function updateInstanceStatuses() {
             const projectId = await getOpenStackProjectId(provider, workshop.openstack_project_name);
             if (!projectId) continue;
             
-            // List instances in project
-            const instances = await listInstances(provider, projectId);
+            // List instances in project using project-scoped authentication to ensure visibility
+            const instances = await listInstancesForProject(
+              provider,
+              workshop.openstack_project_name,
+              projectId
+            );
             
             // Update database with instance statuses and IP addresses
             for (const openstackInstance of instances) {
@@ -944,17 +985,17 @@ async function updateInstanceStatuses() {
               
               if (dbInstance.length > 0) {
                 const instance = dbInstance[0];
-                await update('instances', 'status', openstackInstance.status, 'id', instance.id);
-                await update('instances', 'power_state', openstackInstance.power_state, 'id', instance.id);
+                await update('instances', 'status', openstackInstance.status, 'id', [instance.id]);
+                await update('instances', 'power_state', openstackInstance.power_state, 'id', [instance.id]);
                 
-                // Extract and update IP addresses
+                // Extract and update IP addresses (both fixed and floating)
                 const ipAddresses = [];
                 if (openstackInstance.addresses) {
                   for (const networkName in openstackInstance.addresses) {
                     const networkAddresses = openstackInstance.addresses[networkName];
                     if (Array.isArray(networkAddresses)) {
                       for (const addr of networkAddresses) {
-                        if (addr.addr && addr.type === 'fixed') {
+                        if (addr && addr.addr) {
                           ipAddresses.push(addr.addr);
                         }
                       }
@@ -962,9 +1003,8 @@ async function updateInstanceStatuses() {
                   }
                 }
                 
-                if (ipAddresses.length > 0) {
-                  await update('instances', 'ip_addresses', JSON.stringify(ipAddresses), 'id', instance.id);
-                }
+                // Persist even if empty to clear stale IPs
+                await update('instances', 'ip_addresses', JSON.stringify(ipAddresses), 'id', [instance.id]);
               }
             }
           } catch (workshopError) {

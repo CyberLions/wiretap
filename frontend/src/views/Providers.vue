@@ -4,7 +4,6 @@
       <div class="px-6 py-4 border-b border-gray-700">
         <div class="flex items-center justify-between">
           <h3 class="text-lg font-medium text-white">Providers</h3>
-          <button class="btn btn-primary" @click="createProvider">Create Provider</button>
         </div>
       </div>
       <div class="p-6">
@@ -81,7 +80,7 @@ export default {
     CreateProviderModal,
     EditProviderModal
   },
-  setup() {
+  setup(_, { expose }) {
     const providers = ref([])
     const loading = ref(true)
     const error = ref(null)
@@ -131,6 +130,9 @@ export default {
     const onProviderUpdated = async () => {
       await fetchProviders()
     }
+
+    // Expose method to open the create modal from parent
+    expose({ createProvider })
 
     onMounted(() => {
       fetchProviders()

@@ -3,6 +3,7 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { search, searchAll, insert, update, deleteFrom, executeQuery } = require('../utils/db');
 const { authenticateToken, requireAdmin, canAccessWorkshop } = require('../middleware/auth');
+const { addUserToTeamByEmail, getAllPendingTeamAssignments } = require('../managers/teams');
 
 /**
  * @swagger
@@ -12,6 +13,7 @@ const { authenticateToken, requireAdmin, canAccessWorkshop } = require('../middl
  *     tags: [Teams]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     responses:
  *       200:
  *         description: List of teams
@@ -77,6 +79,7 @@ router.get('/', authenticateToken, async (req, res) => {
  *     tags: [Teams]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -140,6 +143,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
  *     tags: [Teams]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -227,6 +231,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Teams]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -286,7 +291,7 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
     
     for (const field of updateFields) {
       if (req.body[field] !== undefined) {
-        await update('teams', field, req.body[field], 'id', id);
+        await update('teams', field, req.body[field], 'id', [id]);
       }
     }
     
@@ -306,6 +311,7 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Teams]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -390,6 +396,7 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Teams]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -451,6 +458,7 @@ router.get('/:id/users', authenticateToken, async (req, res) => {
  *     tags: [Teams]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -526,6 +534,7 @@ router.post('/:id/users', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Teams]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -566,6 +575,141 @@ router.delete('/:id/users/:userId', authenticateToken, requireAdmin, async (req,
   } catch (error) {
     console.error('Error removing user from team:', error);
     res.status(500).json({ error: 'Failed to remove user from team' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/teams/{id}/users/email:
+ *   post:
+ *     summary: Add user to team by email
+ *     tags: [Teams]
+ *     security:
+ *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: Email address of the user to add
+ *     responses:
+ *       200:
+ *         description: User added to team or queued for future addition
+ *       400:
+ *         description: Invalid input
+ *       404:
+ *         description: Team not found
+ *       409:
+ *         description: User already in team or already queued
+ */
+router.post('/:id/users/email', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'email is required' });
+    }
+    
+    // Use the teams manager function to handle the logic
+    const result = await addUserToTeamByEmail(id, email);
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error adding user to team by email:', error);
+    res.status(500).json({ error: error.message || 'Failed to add user to team' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/teams/pending-assignments:
+ *   get:
+ *     summary: Get all pending team assignments
+ *     tags: [Teams]
+ *     security:
+ *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
+ *     responses:
+ *       200:
+ *         description: List of all pending team assignments
+ */
+router.get('/pending-assignments', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const pendingAssignments = await getAllPendingTeamAssignments();
+    
+    // Add team and user details to each assignment
+    const assignmentsWithDetails = await Promise.all(
+      pendingAssignments.map(async (assignment) => {
+        const team = await search('teams', 'id', assignment.team_id);
+        return {
+          ...assignment,
+          team: team ? { id: team.id, name: team.name, team_number: team.team_number } : null
+        };
+      })
+    );
+    
+    res.json({
+      total_pending: assignmentsWithDetails.length,
+      pending_assignments: assignmentsWithDetails
+    });
+  } catch (error) {
+    console.error('Error fetching pending team assignments:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch pending team assignments' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/teams/{id}/pending-assignments:
+ *   get:
+ *     summary: Get pending team assignments for a specific team
+ *     tags: [Teams]
+ *     security:
+ *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of pending team assignments for the specified team
+ */
+router.get('/:id/pending-assignments', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Get all pending assignments and filter by team
+    const allPendingAssignments = await getAllPendingTeamAssignments();
+    const teamPendingAssignments = allPendingAssignments.filter(
+      assignment => assignment.team_id === id
+    );
+    
+    res.json({
+      team_id: id,
+      total_pending: teamPendingAssignments.length,
+      pending_assignments: teamPendingAssignments
+    });
+  } catch (error) {
+    console.error('Error fetching pending team assignments:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch pending team assignments' });
   }
 });
 

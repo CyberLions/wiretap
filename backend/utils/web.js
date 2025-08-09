@@ -37,7 +37,8 @@ function startServer(port = 3000) {
       try {
         const durationMs = Date.now() - startTimeMs;
         const statusCode = res.statusCode;
-        const userId = req.user?.id || null;
+        // For service accounts, don't set user_id as it would violate foreign key constraint
+        const userId = req.user?.isServiceAccount ? null : (req.user?.id || null);
         const ipHeader = req.headers['x-forwarded-for'];
         const ipAddress = Array.isArray(ipHeader)
           ? ipHeader[0]
@@ -61,6 +62,11 @@ function startServer(port = 3000) {
           userAgent: req.headers['user-agent'],
           query: req.query || {},
           body: redactBody(req.body),
+          // Include service account info in details if applicable
+          ...(req.user?.isServiceAccount && {
+            serviceAccount: req.user.serviceAccountName,
+            authType: 'service_account'
+          })
         });
 
         const logRecord = {
@@ -110,7 +116,8 @@ function startServer(port = 3000) {
 
     (async () => {
       try {
-        const userId = req?.user?.id || null;
+        // For service accounts, don't set user_id as it would violate foreign key constraint
+        const userId = req?.user?.isServiceAccount ? null : (req?.user?.id || null);
         const ipHeader = req.headers?.['x-forwarded-for'];
         const ipAddress = Array.isArray(ipHeader)
           ? ipHeader[0]
@@ -120,6 +127,11 @@ function startServer(port = 3000) {
           stack: err.stack,
           path: req?.originalUrl || req?.url,
           method: req?.method,
+          // Include service account info in details if applicable
+          ...(req?.user?.isServiceAccount && {
+            serviceAccount: req.user.serviceAccountName,
+            authType: 'service_account'
+          })
         });
         const logRecord = {
           id: uuidv4(),

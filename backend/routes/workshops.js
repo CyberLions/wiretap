@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
+const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const { executeQuery, search, searchAll, insert, update, deleteFrom } = require('../utils/db');
+const { datetimeLocalToUTC } = require('../utils/timezone');
 const { v4: uuidv4 } = require('uuid');
-const { search, searchAll, insert, update, deleteFrom, executeQuery } = require('../utils/db');
-const { authenticateToken, requireAdmin, canAccessWorkshop } = require('../middleware/auth');
 
 /**
  * @swagger
@@ -12,6 +13,7 @@ const { authenticateToken, requireAdmin, canAccessWorkshop } = require('../middl
  *     tags: [Workshops]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     responses:
  *       200:
  *         description: List of workshops
@@ -98,6 +100,7 @@ router.get('/', authenticateToken, async (req, res) => {
  *     tags: [Workshops]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -110,7 +113,7 @@ router.get('/', authenticateToken, async (req, res) => {
  *       404:
  *         description: Workshop not found
  */
-router.get('/:id', authenticateToken, canAccessWorkshop, async (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const workshop = await search('workshops', 'id', id);
@@ -134,6 +137,7 @@ router.get('/:id', authenticateToken, canAccessWorkshop, async (req, res) => {
  *     tags: [Workshops]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -157,6 +161,14 @@ router.get('/:id', authenticateToken, canAccessWorkshop, async (req, res) => {
  *               openstack_project_name:
  *                 type: string
  *                 example: "workshop-2024"
+ *               lockout_start:
+ *                 type: string
+ *                 format: date-time
+ *                 example: "2025-01-05T13:00:00Z"
+ *               lockout_end:
+ *                 type: string
+ *                 format: date-time
+ *                 example: "2025-01-05T17:00:00Z"
  *     responses:
  *       201:
  *         description: Workshop created successfully
@@ -165,7 +177,7 @@ router.get('/:id', authenticateToken, canAccessWorkshop, async (req, res) => {
  */
 router.post('/', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { name, description, provider_id, openstack_project_name } = req.body;
+    const { name, description, provider_id, openstack_project_name, lockout_start, lockout_end } = req.body;
     
     if (!name || !provider_id || !openstack_project_name) {
       return res.status(400).json({ 
@@ -194,6 +206,11 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
     }
     
     const workshopId = uuidv4();
+    const normalizeDateTime = (value) => {
+      if (!value) return null;
+      return datetimeLocalToUTC(value);
+    };
+
     const workshopData = {
       id: workshopId,
       name,
@@ -201,12 +218,19 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
       provider_id,
       openstack_project_id: projectId,
       openstack_project_name,
-      enabled: true
+      enabled: true,
+      lockout_start: normalizeDateTime(lockout_start),
+      lockout_end: normalizeDateTime(lockout_end)
     };
     
     await insert('workshops', Object.keys(workshopData), Object.values(workshopData));
     
     const newWorkshop = await search('workshops', 'id', workshopId);
+    // Schedule lockout if provided
+    if (newWorkshop.lockout_start && newWorkshop.lockout_end) {
+      const { rescheduleForWorkshop } = require('../managers/lockoutScheduler');
+      rescheduleForWorkshop(workshopId);
+    }
     res.status(201).json(newWorkshop);
   } catch (error) {
     console.error('Error creating workshop:', error);
@@ -222,6 +246,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Workshops]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -241,6 +266,12 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
  *                 type: string
  *               enabled:
  *                 type: boolean
+ *               lockout_start:
+ *                 type: string
+ *                 format: date-time
+ *               lockout_end:
+ *                 type: string
+ *                 format: date-time
  *     responses:
  *       200:
  *         description: Workshop updated successfully
@@ -264,15 +295,34 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
       }
     }
     
-    const updateFields = ['name', 'description', 'provider_id', 'openstack_project_name', 'enabled'];
+    const updateFields = ['name', 'description', 'provider_id', 'openstack_project_name', 'enabled', 'lockout_start', 'lockout_end'];
+
+    const normalizeDateTime = (value) => {
+      if (value === null || value === undefined) return undefined; // skip update if undefined
+      if (value === '') return null; // allow clearing
+      return datetimeLocalToUTC(value);
+    };
     
+    let lockoutChanged = false;
     for (const field of updateFields) {
       if (req.body[field] !== undefined) {
-        await update('workshops', field, req.body[field], 'id', id);
+        const value = (field === 'lockout_start' || field === 'lockout_end')
+          ? normalizeDateTime(req.body[field])
+          : req.body[field];
+        if (value !== undefined) {
+          await update('workshops', field, value, 'id', [id]);
+          if (field === 'lockout_start' || field === 'lockout_end') {
+            lockoutChanged = true;
+          }
+        }
       }
     }
     
     const updatedWorkshop = await search('workshops', 'id', id);
+    if (lockoutChanged) {
+      const { rescheduleForWorkshop } = require('../managers/lockoutScheduler');
+      rescheduleForWorkshop(id);
+    }
     res.json(updatedWorkshop);
   } catch (error) {
     console.error('Error updating workshop:', error);
@@ -288,6 +338,7 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Workshops]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -361,6 +412,7 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Workshops]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -371,7 +423,7 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
  *       200:
  *         description: List of instances in workshop
  */
-router.get('/:id/instances', authenticateToken, canAccessWorkshop, async (req, res) => {
+router.get('/:id/instances', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const instances = await searchAll('instances', ['workshop_id'], [id], { orderBy: 'name' });
@@ -391,6 +443,7 @@ router.get('/:id/instances', authenticateToken, canAccessWorkshop, async (req, r
  *     tags: [Workshops]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -401,7 +454,7 @@ router.get('/:id/instances', authenticateToken, canAccessWorkshop, async (req, r
  *       200:
  *         description: List of teams in workshop
  */
-router.get('/:id/teams', authenticateToken, canAccessWorkshop, async (req, res) => {
+router.get('/:id/teams', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const teams = await searchAll('teams', ['workshop_id'], [id], { orderBy: 'team_number' });

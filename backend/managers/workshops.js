@@ -54,7 +54,9 @@ async function createWorkshop(workshopData) {
     description, 
     provider_id, 
     openstack_project_name, 
-    enabled = true 
+    enabled = true,
+    lockout_start = null,
+    lockout_end = null
   } = workshopData;
   
   if (!name || !provider_id || !openstack_project_name) {
@@ -87,6 +89,8 @@ async function createWorkshop(workshopData) {
     provider_id,
     openstack_project_name,
     enabled,
+    lockout_start: lockout_start ? new Date(lockout_start).toISOString().slice(0, 19).replace('T', ' ') : null,
+    lockout_end: lockout_end ? new Date(lockout_end).toISOString().slice(0, 19).replace('T', ' ') : null,
     created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
     updated_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
   };
@@ -106,11 +110,24 @@ async function updateWorkshop(id, updateData) {
     throw new Error('Workshop not found');
   }
   
-  const updateFields = ['name', 'description', 'provider_id', 'openstack_project_name', 'enabled'];
+  const updateFields = ['name', 'description', 'provider_id', 'openstack_project_name', 'enabled', 'lockout_start', 'lockout_end'];
   
   for (const field of updateFields) {
     if (updateData[field] !== undefined) {
-      await update('workshops', field, updateData[field], 'id', id);
+      let value = updateData[field];
+      if ((field === 'lockout_start' || field === 'lockout_end')) {
+        if (value === '') {
+          value = null;
+        } else if (value != null) {
+          const d = new Date(value);
+          if (!isNaN(d)) {
+            value = d.toISOString().slice(0, 19).replace('T', ' ');
+          } else {
+            continue; // skip invalid date
+          }
+        }
+      }
+              await update('workshops', field, value, 'id', [id]);
     }
   }
   
@@ -249,7 +266,7 @@ async function toggleWorkshopStatus(id, enabled) {
     throw new Error('Workshop not found');
   }
   
-  await update('workshops', 'enabled', enabled, 'id', id);
+  await update('workshops', 'enabled', enabled, 'id', [id]);
   
   return { message: `Workshop ${enabled ? 'enabled' : 'disabled'} successfully` };
 }

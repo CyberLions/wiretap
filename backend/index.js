@@ -25,6 +25,17 @@ const { dbInitialization } = require('./utils/db');
     // Schedule instance status updates every 5 minutes
     const scheduleInstanceUpdates = () => {
       const { updateInstanceStatuses } = require('./managers/openstack');
+
+      // Run a sync once at startup
+      (async () => {
+        try {
+          console.log('Running initial instance status sync...');
+          await updateInstanceStatuses();
+          console.log('Initial instance status sync completed');
+        } catch (error) {
+          console.error('Error in initial instance sync:', error);
+        }
+      })();
       
       setInterval(async () => {
         try {
@@ -50,9 +61,52 @@ const { dbInitialization } = require('./utils/db');
       }, 60 * 60 * 1000); // 1 hour
     };
     
+    // Schedule log cleanup every day at 2 AM
+    const scheduleLogCleanup = () => {
+      const { cleanupOldLogs } = require('./managers/admin');
+      
+      // Calculate time until next 2 AM
+      const now = new Date();
+      const nextRun = new Date(now);
+      nextRun.setHours(2, 0, 0, 0);
+      
+      if (nextRun <= now) {
+        nextRun.setDate(nextRun.getDate() + 1);
+      }
+      
+      const timeUntilNextRun = nextRun.getTime() - now.getTime();
+      
+      // Run cleanup at next 2 AM
+      setTimeout(async () => {
+        try {
+          console.log('Running scheduled log cleanup...');
+          await cleanupOldLogs(7); // Keep logs for 7 days
+          console.log('Scheduled log cleanup completed');
+        } catch (error) {
+          console.error('Error in scheduled log cleanup:', error);
+        }
+        
+        // Schedule next run every 24 hours
+        setInterval(async () => {
+          try {
+            console.log('Running scheduled log cleanup...');
+            await cleanupOldLogs(7); // Keep logs for 7 days
+            console.log('Scheduled log cleanup completed');
+          } catch (error) {
+            console.error('Error in scheduled log cleanup:', error);
+          }
+        }, 24 * 60 * 60 * 1000); // 24 hours
+      }, timeUntilNextRun);
+    };
+    
     // Start scheduled tasks
     scheduleInstanceUpdates();
     scheduleSessionCleanup();
+    scheduleLogCleanup();
+
+    // Initialize lockout scheduler
+    const { initializeLockoutScheduler } = require('./managers/lockoutScheduler');
+    await initializeLockoutScheduler();
     
     console.log("Scheduled tasks configured successfully");
     

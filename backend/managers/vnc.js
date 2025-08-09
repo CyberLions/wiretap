@@ -99,7 +99,7 @@ async function extendConsoleSession(sessionToken) {
   
   // Extend session
   const newExpiresAt = new Date(Date.now() + vncConfig.sessionTimeout);
-  await update('sessions', 'expires_at', newExpiresAt, 'id', session.id);
+      await update('sessions', 'expires_at', newExpiresAt, 'id', [session.id]);
   
   return {
     session_token: sessionToken,

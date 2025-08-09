@@ -204,11 +204,11 @@ router.get('/openid/callback', async (req, res) => {
         role: userRole
       };
       
-      await update('users', 'email', updateData.email, 'id', user.id);
-      await update('users', 'first_name', updateData.first_name, 'id', user.id);
-      await update('users', 'last_name', updateData.last_name, 'id', user.id);
-      await update('users', 'openid_groups', updateData.openid_groups, 'id', user.id);
-      await update('users', 'role', updateData.role, 'id', user.id);
+          await update('users', 'email', updateData.email, 'id', [user.id]);
+    await update('users', 'first_name', updateData.first_name, 'id', [user.id]);
+    await update('users', 'last_name', updateData.last_name, 'id', [user.id]);
+    await update('users', 'openid_groups', updateData.openid_groups, 'id', [user.id]);
+    await update('users', 'role', updateData.role, 'id', [user.id]);
       
       user = await search('users', 'id', user.id);
     }
@@ -242,6 +242,7 @@ router.get('/openid/callback', async (req, res) => {
  *     tags: [Authentication]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     responses:
  *       200:
  *         description: Current user information
@@ -267,12 +268,94 @@ router.get('/openid/callback', async (req, res) => {
  *       401:
  *         description: Invalid token
  */
+
+
+/**
+ * @swagger
+ * /api/auth/me:
+ *   get:
+ *     summary: Get current user information
+ *     description: Returns information about the currently authenticated user or service account
+ *     tags: [Authentication]
+ *     security:
+ *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
+ *     responses:
+ *       200:
+ *         description: User information retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                 username:
+ *                   type: string
+ *                 email:
+ *                   type: string
+ *                   nullable: true
+ *                 first_name:
+ *                   type: string
+ *                   nullable: true
+ *                 last_name:
+ *                   type: string
+ *                   nullable: true
+ *                 role:
+ *                   type: string
+ *                 enabled:
+ *                   type: boolean
+ *                 isServiceAccount:
+ *                   type: boolean
+ *                 serviceAccountName:
+ *                   type: string
+ *                   nullable: true
+ *       401:
+ *         description: Invalid token or API key
+ */
 router.get('/me', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'No token provided' });
+    if (!authHeader) {
+      return res.status(401).json({ error: 'No authorization header provided' });
+    }
+
+    // Check if it's a service account API key (starts with 'sk-')
+    if (authHeader.startsWith('sk-')) {
+      const apiKey = authHeader;
+      
+      // Find service account by API key
+      const serviceAccount = await search('service_accounts', 'api_key', apiKey);
+      
+      if (!serviceAccount || !serviceAccount.enabled) {
+        return res.status(401).json({ error: 'Invalid or disabled service account' });
+      }
+      
+             // Update last used timestamp - convert to MySQL datetime format
+       const now = new Date();
+       const mysqlDateTime = now.toISOString().slice(0, 19).replace('T', ' ');
+       await update('service_accounts', 'last_used', mysqlDateTime, 'id', [serviceAccount.id]);
+      
+      // Return service account info
+      res.json({
+        id: serviceAccount.id,
+        username: `service-${serviceAccount.name}`,
+        email: null,
+        first_name: null,
+        last_name: null,
+        role: 'SERVICE_ACCOUNT',
+        enabled: serviceAccount.enabled,
+        isServiceAccount: true,
+        serviceAccountName: serviceAccount.name
+      });
+      
+      return;
+    }
+    
+    // Check if it's a JWT token (starts with 'Bearer ')
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Invalid authorization format' });
     }
     
     const token = authHeader.substring(7);
@@ -288,10 +371,16 @@ router.get('/me', async (req, res) => {
     
     const { password_hash, ...userInfo } = user;
     
-    res.json(userInfo);
+    res.json({
+      ...userInfo,
+      isServiceAccount: false
+    });
     
   } catch (error) {
-    console.error('Get current user error:', error);
+    // Don't log JWT malformed errors as they're common and noisy
+    if (error.name !== 'JsonWebTokenError' || error.message !== 'jwt malformed') {
+      console.error('Get current user error:', error);
+    }
     res.status(401).json({ error: 'Invalid token' });
   }
 });
@@ -304,6 +393,7 @@ router.get('/me', async (req, res) => {
  *     tags: [Authentication]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     responses:
  *       200:
  *         description: New token generated
@@ -358,7 +448,10 @@ router.post('/refresh', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Token refresh error:', error);
+    // Don't log JWT malformed errors as they're common and noisy
+    if (error.name !== 'JsonWebTokenError' || error.message !== 'jwt malformed') {
+      console.error('Token refresh error:', error);
+    }
     res.status(401).json({ error: 'Invalid token' });
   }
 });
@@ -371,6 +464,7 @@ router.post('/refresh', async (req, res) => {
  *     tags: [Authentication]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     responses:
  *       200:
  *         description: Token is valid
@@ -413,7 +507,10 @@ router.get('/verify', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Token verification error:', error);
+    // Don't log JWT malformed errors as they're common and noisy
+    if (error.name !== 'JsonWebTokenError' || error.message !== 'jwt malformed') {
+      console.error('Token verification error:', error);
+    }
     res.status(401).json({ error: 'Invalid token' });
   }
 });

@@ -18,12 +18,27 @@ const options = {
         description: 'Production server'
       }
     ],
+    security: [
+      {
+        BearerAuth: []
+      },
+      {
+        ServiceAccountAuth: []
+      }
+    ],
     components: {
       securitySchemes: {
         BearerAuth: {
           type: 'http',
           scheme: 'bearer',
-          bearerFormat: 'JWT'
+          bearerFormat: 'JWT',
+          description: 'JWT token for user authentication'
+        },
+        ServiceAccountAuth: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'Authorization',
+          description: 'Service account API key (starts with sk-)'
         }
       }
     },

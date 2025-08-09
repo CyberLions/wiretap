@@ -215,7 +215,7 @@ async function changePassword(userId, currentPassword, newPassword) {
   const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
   
   // Update password
-  await update('users', 'password_hash', newPasswordHash, 'id', userId);
+  await update('users', 'password_hash', newPasswordHash, 'id', [userId]);
   
   return { message: 'Password changed successfully' };
 }
@@ -235,7 +235,7 @@ async function resetPassword(userId, newPassword) {
   const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
   
   // Update password
-  await update('users', 'password_hash', newPasswordHash, 'id', userId);
+  await update('users', 'password_hash', newPasswordHash, 'id', [userId]);
   
   return { message: 'Password reset successfully' };
 }

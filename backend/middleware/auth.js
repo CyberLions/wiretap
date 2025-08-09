@@ -3,14 +3,50 @@ const { jwtConfig } = require('../utils/config');
 const { search, searchAll } = require('../utils/db');
 
 /**
- * Middleware to authenticate JWT token
+ * Middleware to authenticate JWT token or service account API key
  */
 const authenticateToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'No token provided' });
+    if (!authHeader) {
+      return res.status(401).json({ error: 'No authorization header provided' });
+    }
+
+    // Check if it's a service account API key (starts with 'sk-')
+    if (authHeader.startsWith('sk-')) {
+      const apiKey = authHeader;
+      
+      // Find service account by API key
+      const serviceAccount = await search('service_accounts', 'api_key', apiKey);
+      
+      if (!serviceAccount || !serviceAccount.enabled) {
+        return res.status(401).json({ error: 'Invalid or disabled service account' });
+      }
+      
+             // Update last used timestamp - convert to MySQL datetime format
+       const now = new Date();
+       const mysqlDateTime = now.toISOString().slice(0, 19).replace('T', ' ');
+       await require('../utils/db').update('service_accounts', 'last_used', mysqlDateTime, 'id', [serviceAccount.id]);
+      
+      // Add service account to request object
+      req.user = {
+        id: serviceAccount.id,
+        username: `service-${serviceAccount.name}`,
+        email: null,
+        role: 'SERVICE_ACCOUNT',
+        first_name: null,
+        last_name: null,
+        isServiceAccount: true,
+        serviceAccountName: serviceAccount.name
+      };
+      
+      return next();
+    }
+    
+    // Check if it's a JWT token (starts with 'Bearer ')
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Invalid authorization format' });
     }
     
     const token = authHeader.substring(7);
@@ -31,26 +67,30 @@ const authenticateToken = async (req, res, next) => {
       email: user.email,
       role: user.role,
       first_name: user.first_name,
-      last_name: user.last_name
+      last_name: user.last_name,
+      isServiceAccount: false
     };
     
     next();
   } catch (error) {
-    console.error('Token verification error:', error);
+    // Don't log JWT malformed errors as they're common and noisy
+    if (error.name !== 'JsonWebTokenError' || error.message !== 'jwt malformed') {
+      console.error('Token verification error:', error);
+    }
     res.status(401).json({ error: 'Invalid token' });
   }
 };
 
 /**
- * Middleware to require admin role
+ * Middleware to require admin role or service account
  */
 const requireAdmin = (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
   
-  if (req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: 'Admin access required' });
+  if (req.user.role !== 'ADMIN' && req.user.role !== 'SERVICE_ACCOUNT') {
+    return res.status(403).json({ error: 'Admin access or service account required' });
   }
   
   next();

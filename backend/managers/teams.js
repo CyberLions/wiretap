@@ -90,7 +90,7 @@ async function updateTeam(id, updateData) {
   
   for (const field of updateFields) {
     if (updateData[field] !== undefined) {
-      await update('teams', field, updateData[field], 'id', id);
+              await update('teams', field, updateData[field], 'id', [id]);
     }
   }
   
@@ -190,14 +190,139 @@ async function addMemberToTeam(teamId, userId) {
   }
   
   // Check if user is already in team
-  const existingMembership = await search('user_teams', ['user_id', 'team_id'], [userId, teamId]);
-  if (existingMembership) {
+  const existingMembership = await searchAll('user_teams', ['user_id', 'team_id'], [userId, teamId]);
+  if (existingMembership && existingMembership.length > 0) {
     throw new Error('User is already a member of this team');
   }
   
-  await insert('user_teams', ['user_id', 'team_id'], [userId, teamId]);
+  const userTeamId = uuidv4();
+  await insert('user_teams', ['id', 'user_id', 'team_id'], [userTeamId, userId, teamId]);
   
   return { message: 'Member added to team successfully' };
+}
+
+/**
+ * Add user to team by email
+ */
+async function addUserToTeamByEmail(teamId, email) {
+  // Check if team exists
+  const team = await search('teams', 'id', teamId);
+  if (!team) {
+    throw new Error('Team not found');
+  }
+  
+  if (!email || typeof email !== 'string') {
+    throw new Error('Valid email is required');
+  }
+  
+  // Check if user exists by email
+  const user = await search('users', 'email', email);
+  
+  if (user) {
+    // User exists, add them to the team
+    const existingMembership = await searchAll('user_teams', ['user_id', 'team_id'], [user.id, teamId]);
+    if (existingMembership && existingMembership.length > 0) {
+      throw new Error('User is already a member of this team');
+    }
+    
+    const userTeamId = uuidv4();
+    await insert('user_teams', ['id', 'user_id', 'team_id'], [userTeamId, user.id, teamId]);
+    return { 
+      message: 'User added to team successfully',
+      user_id: user.id,
+      status: 'existing_user'
+    };
+  } else {
+    // User doesn't exist, store in temp_user_team table
+    const existingTemp = await searchAll('temp_user_team', ['email', 'team_id'], [email, teamId]);
+    if (existingTemp && existingTemp.length > 0) {
+      throw new Error('User is already queued to join this team');
+    }
+    
+    const tempId = uuidv4();
+    await insert('temp_user_team', ['id', 'email', 'team_id'], [tempId, email, teamId]);
+    
+    return { 
+      message: 'User will be added to team when they create an account',
+      email,
+      status: 'pending_user'
+    };
+  }
+}
+
+/**
+ * Get pending team assignments for a user by email
+ */
+async function getPendingTeamAssignments(email) {
+  if (!email || typeof email !== 'string') {
+    throw new Error('Valid email is required');
+  }
+  
+  const pendingAssignments = await searchAll('temp_user_team', ['email'], [email]);
+  return pendingAssignments;
+}
+
+/**
+ * Get all pending team assignments across all users
+ */
+async function getAllPendingTeamAssignments() {
+  const pendingAssignments = await searchAll('temp_user_team', [], []);
+  return pendingAssignments;
+}
+
+/**
+ * Process pending team assignments for a user
+ */
+async function processPendingTeamAssignments(userId, email) {
+  if (!userId || !email) {
+    throw new Error('User ID and email are required');
+  }
+  
+  const pendingAssignments = await getPendingTeamAssignments(email);
+  
+  if (pendingAssignments.length === 0) {
+    return { message: 'No pending team assignments found' };
+  }
+  
+  const results = [];
+  
+  for (const assignment of pendingAssignments) {
+    try {
+      // Check if user is already in this team
+      const existingMembership = await searchAll('user_teams', ['user_id', 'team_id'], [userId, assignment.team_id]);
+      
+      if (!existingMembership || existingMembership.length === 0) {
+        // Add user to team
+        const userTeamId = uuidv4();
+        await insert('user_teams', ['id', 'user_id', 'team_id'], [userTeamId, userId, assignment.team_id]);
+        results.push({
+          team_id: assignment.team_id,
+          status: 'added'
+        });
+      } else {
+        results.push({
+          team_id: assignment.team_id,
+          status: 'already_member'
+        });
+      }
+      
+      // Remove from temp table
+      await deleteFrom('temp_user_team', ['id'], [assignment.id]);
+      
+    } catch (error) {
+      console.error(`Error processing team assignment for team ${assignment.team_id}:`, error);
+      results.push({
+        team_id: assignment.team_id,
+        status: 'error',
+        error: error.message
+      });
+    }
+  }
+  
+  return {
+    message: 'Pending team assignments processed',
+    results
+  };
 }
 
 /**
@@ -205,8 +330,8 @@ async function addMemberToTeam(teamId, userId) {
  */
 async function removeMemberFromTeam(teamId, userId) {
   // Check if membership exists
-  const membership = await search('user_teams', ['user_id', 'team_id'], [userId, teamId]);
-  if (!membership) {
+  const membership = await searchAll('user_teams', ['user_id', 'team_id'], [userId, teamId]);
+  if (!membership || membership.length === 0) {
     throw new Error('User is not a member of this team');
   }
   
@@ -279,8 +404,8 @@ async function canUserAccessTeam(userId, teamId) {
   }
   
   // Check if user is a member of the team
-  const membership = await search('user_teams', ['user_id', 'team_id'], [userId, teamId]);
-  return !!membership;
+  const membership = await searchAll('user_teams', ['user_id', 'team_id'], [userId, teamId]);
+  return !!(membership && membership.length > 0);
 }
 
 module.exports = {
@@ -291,6 +416,10 @@ module.exports = {
   deleteTeam,
   getTeamMembers,
   addMemberToTeam,
+  addUserToTeamByEmail,
+  getPendingTeamAssignments,
+  getAllPendingTeamAssignments,
+  processPendingTeamAssignments,
   removeMemberFromTeam,
   getTeamWithMembers,
   getTeamsWithMemberCounts,

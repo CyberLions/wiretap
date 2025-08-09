@@ -4,7 +4,6 @@
       <div class="px-6 py-4 border-b border-gray-700">
         <div class="flex items-center justify-between">
           <h3 class="text-lg font-medium text-white">Users</h3>
-          <button class="btn btn-primary" @click="createUser">Create User</button>
         </div>
       </div>
       <div class="p-6">
@@ -81,8 +80,8 @@
 
 <script>
 import { ref, onMounted } from 'vue'
-import api from '@/services/api'
 import AddUserModal from '@/components/AddUserModal.vue'
+import api from '@/services/api'
 import EditUserModal from '@/components/EditUserModal.vue'
 
 export default {
@@ -91,7 +90,7 @@ export default {
     AddUserModal,
     EditUserModal
   },
-  setup() {
+  setup(_, { expose }) {
     const users = ref([])
     const loading = ref(true)
     const error = ref(null)
@@ -140,6 +139,9 @@ export default {
       await fetchUsers()
     }
 
+    // Expose method to open the create modal from parent
+    expose({ createUser })
+
     onMounted(() => {
       fetchUsers()
     })
@@ -150,7 +152,7 @@ export default {
       showCreateUserModal,
       showEditUserModal,
       selectedUser,
-      createUser, 
+      createUser,
       editUser, 
       deleteUser,
       onUserCreated,

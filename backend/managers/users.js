@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcrypt');
 const { search, searchAll, insert, update, deleteFrom, executeQuery } = require('../utils/db');
+const { processPendingTeamAssignments } = require('./teams');
 
 /**
  * Get all users
@@ -87,9 +88,23 @@ async function createUser(userData) {
   
   await insert('users', Object.keys(newUser), Object.values(newUser));
   
-  // Return sanitized user
+  // Process any pending team assignments for this user
+  let teamAssignmentResult = null;
+  if (email) {
+    try {
+      teamAssignmentResult = await processPendingTeamAssignments(userId, email);
+    } catch (error) {
+      console.error('Error processing pending team assignments:', error);
+      // Don't fail user creation if team assignment fails
+    }
+  }
+  
+  // Return sanitized user with team assignment info
   const { password_hash, ...sanitized } = newUser;
-  return sanitized;
+  return {
+    ...sanitized,
+    team_assignments: teamAssignmentResult
+  };
 }
 
 /**
@@ -106,7 +121,7 @@ async function updateUser(id, updateData) {
   
   for (const field of updateFields) {
     if (updateData[field] !== undefined) {
-      await update('users', field, updateData[field], 'id', id);
+              await update('users', field, updateData[field], 'id', [id]);
     }
   }
   
@@ -153,7 +168,7 @@ async function changeUserPassword(userId, currentPassword, newPassword) {
   const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
   
   // Update password
-  await update('users', 'password_hash', newPasswordHash, 'id', userId);
+  await update('users', 'password_hash', newPasswordHash, 'id', [userId]);
   
   return { message: 'Password changed successfully' };
 }
@@ -173,7 +188,7 @@ async function resetUserPassword(userId, newPassword) {
   const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
   
   // Update password
-  await update('users', 'password_hash', newPasswordHash, 'id', userId);
+  await update('users', 'password_hash', newPasswordHash, 'id', [userId]);
   
   return { message: 'Password reset successfully' };
 }
@@ -188,7 +203,7 @@ async function toggleUserStatus(id, enabled) {
     throw new Error('User not found');
   }
   
-  await update('users', 'enabled', enabled, 'id', id);
+  await update('users', 'enabled', enabled, 'id', [id]);
   
   return { message: `User ${enabled ? 'enabled' : 'disabled'} successfully` };
 }
@@ -246,12 +261,13 @@ async function addUserToTeam(userId, teamId) {
   }
   
   // Check if user is already in team
-  const existingMembership = await search('user_teams', ['user_id', 'team_id'], [userId, teamId]);
-  if (existingMembership) {
+  const existingMembership = await searchAll('user_teams', ['user_id', 'team_id'], [userId, teamId]);
+  if (existingMembership && existingMembership.length > 0) {
     throw new Error('User is already a member of this team');
   }
   
-  await insert('user_teams', ['user_id', 'team_id'], [userId, teamId]);
+  const userTeamId = uuidv4();
+  await insert('user_teams', ['id', 'user_id', 'team_id'], [userTeamId, userId, teamId]);
   
   return { message: 'User added to team successfully' };
 }
@@ -261,8 +277,8 @@ async function addUserToTeam(userId, teamId) {
  */
 async function removeUserFromTeam(userId, teamId) {
   // Check if membership exists
-  const membership = await search('user_teams', ['user_id', 'team_id'], [userId, teamId]);
-  if (!membership) {
+  const membership = await searchAll('user_teams', ['user_id', 'team_id'], [userId, teamId]);
+  if (!membership || membership.length === 0) {
     throw new Error('User is not a member of this team');
   }
   

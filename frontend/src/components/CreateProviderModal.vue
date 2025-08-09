@@ -96,6 +96,18 @@
           />
         </div>
 
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">
+            Proxy Through Host (optional)
+          </label>
+          <input
+            v-model="form.proxy_through_host"
+            type="text"
+            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="e.g., pritunl-nginx-proxy.pritunl"
+          />
+        </div>
+
         <div class="flex justify-end space-x-3 pt-4">
           <button
             type="button"
@@ -146,7 +158,8 @@ export default {
       region_name: '',
       username: '',
       password: '',
-      project_name: ''
+      project_name: '',
+      proxy_through_host: ''
     })
 
     const resetForm = () => {
@@ -157,7 +170,8 @@ export default {
         region_name: '',
         username: '',
         password: '',
-        project_name: ''
+        project_name: '',
+        proxy_through_host: ''
       }
     }
 

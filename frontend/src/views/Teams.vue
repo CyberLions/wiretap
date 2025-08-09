@@ -122,7 +122,7 @@ export default {
     TeamMembersModal,
     Toast
   },
-  setup() {
+  setup(_, { expose }) {
     const teams = ref([])
     const competitions = ref([])
     const users = ref([])
@@ -227,6 +227,11 @@ export default {
       showAddTeamModal.value = false
     }
 
+    // Expose method to open the create modal from parent
+    const openAddTeam = () => {
+      showAddTeamModal.value = true
+    }
+
     const closeEditTeamModal = () => {
       showEditTeamModal.value = false
       selectedTeam.value = null
@@ -265,6 +270,9 @@ export default {
       toast.value.show = false
     }
 
+    // Expose method to open the create modal from parent
+    expose({ openAddTeam })
+
     onMounted(() => {
       fetchData()
     })
@@ -286,6 +294,7 @@ export default {
       deleteTeam,
       manageTeamMembers,
       closeAddTeamModal,
+      openAddTeam,
       closeEditTeamModal,
       closeTeamMembersModal,
       onTeamCreated,

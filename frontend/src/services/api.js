@@ -137,7 +137,8 @@ const users = {
   update: (id, data) => api.put(`/users/${id}`, data),
   delete: (id) => api.delete(`/users/${id}`),
   generateUsers: (data) => api.post('/users/generate', data),
-  changePassword: (id, password) => api.put(`/users/${id}/password`, { password })
+  changePassword: (id, password) => api.put(`/users/${id}/password`, { password }),
+  removePendingTeamAssignment: (email, teamId) => api.delete(`/users/pending-teams/${encodeURIComponent(email)}/remove?team_id=${teamId}`)
 }
 
 // Teams
@@ -149,7 +150,10 @@ const teams = {
   delete: (id) => api.delete(`/teams/${id}`),
   getUsers: (id) => api.get(`/teams/${id}/users`),
   addUser: (id, userId) => api.post(`/teams/${id}/users`, { user_id: userId }),
-  removeUser: (id, userId) => api.delete(`/teams/${id}/users/${userId}`)
+  removeUser: (id, userId) => api.delete(`/teams/${id}/users/${userId}`),
+  addUserByEmail: (id, email) => api.post(`/teams/${id}/users/email`, { email }),
+  getPendingAssignments: () => api.get('/teams/pending-assignments'),
+  getPendingAssignmentsForTeam: (teamId) => api.get(`/teams/${teamId}/pending-assignments`)
 }
 
 // Workshops (Competitions)
@@ -178,10 +182,19 @@ const providers = {
 const admin = {
   getStats: () => api.get('/admin/stats'),
   getLogs: (params = {}) => api.get('/admin/logs', { params }),
+  cleanupLogs: (days = 7) => api.post('/admin/logs/cleanup', { days }),
   lockoutVM: (id) => api.post(`/admin/instances/${id}/lockout`),
   unlockVM: (id) => api.post(`/admin/instances/${id}/unlock`),
+  lockWorkshop: (id) => api.post(`/admin/workshops/${id}/lock`),
+  unlockWorkshop: (id) => api.post(`/admin/workshops/${id}/unlock`),
+  getLockoutSchedule: (timezoneOffset = 0) => api.get('/admin/lockouts', {
+    headers: {
+      'X-Timezone-Offset': timezoneOffset
+    }
+  }),
   getServiceAccounts: () => api.get('/admin/service-accounts'),
   createServiceAccount: (data) => api.post('/admin/service-accounts', data),
+  updateServiceAccount: (id, data) => api.put(`/admin/service-accounts/${id}`, data),
   deleteServiceAccount: (id) => api.delete(`/admin/service-accounts/${id}`)
 }
 

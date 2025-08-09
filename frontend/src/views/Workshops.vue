@@ -45,10 +45,30 @@
             </div>
             
             <div class="mt-4 flex justify-between items-center">
-              <span class="text-xs text-gray-500">
-                Created {{ formatDate(workshop.created_at) }}
+              <span class="text-xs text-gray-500 space-x-2">
+                <span>Created {{ formatDate(workshop.created_at) }}</span>
+                <template v-if="workshop.lockout_start">
+                  <span>• Start {{ formatDateTime(workshop.lockout_start) }}</span>
+                </template>
+                <template v-if="workshop.lockout_end">
+                  <span>• End {{ formatDateTime(workshop.lockout_end) }}</span>
+                </template>
               </span>
               <div class="flex space-x-2">
+                <button 
+                  @click.stop="lockWorkshop(workshop.id)"
+                  class="text-yellow-400 hover:text-yellow-300 text-sm"
+                  title="Lock all VMs in this workshop"
+                >
+                  Lock
+                </button>
+                <button 
+                  @click.stop="unlockWorkshop(workshop.id)"
+                  class="text-green-400 hover:text-green-300 text-sm"
+                  title="Unlock all VMs in this workshop"
+                >
+                  Unlock
+                </button>
                 <button 
                   @click.stop="editWorkshop(workshop.id)"
                   class="text-blue-400 hover:text-blue-300 text-sm"
@@ -112,7 +132,7 @@ export default {
     EditWorkshopModal,
     Toast
   },
-  setup() {
+  setup(_, { expose }) {
     const router = useRouter()
     
     const workshops = ref([])
@@ -184,6 +204,11 @@ export default {
       showAddWorkshopModal.value = false
     }
 
+    // Expose method to open the create modal from parent
+    const openAddWorkshop = () => {
+      showAddWorkshopModal.value = true
+    }
+
     const closeEditWorkshopModal = () => {
       showEditWorkshopModal.value = false
       selectedWorkshop.value = null
@@ -197,6 +222,26 @@ export default {
     const onWorkshopUpdated = () => {
       fetchData()
       showToast('Workshop updated successfully', 'success')
+    }
+
+    const lockWorkshop = async (workshopId) => {
+      try {
+        await api.admin.lockWorkshop(workshopId)
+        showToast('Workshop locked', 'success')
+      } catch (err) {
+        console.error('Error locking workshop:', err)
+        showToast('Failed to lock workshop', 'error')
+      }
+    }
+
+    const unlockWorkshop = async (workshopId) => {
+      try {
+        await api.admin.unlockWorkshop(workshopId)
+        showToast('Workshop unlocked', 'success')
+      } catch (err) {
+        console.error('Error unlocking workshop:', err)
+        showToast('Failed to unlock workshop', 'error')
+      }
     }
 
     const showToast = (message, type = 'success') => {
@@ -219,6 +264,23 @@ export default {
       return new Date(dateString).toLocaleDateString()
     }
 
+    const formatDateTime = (dateString) => {
+      if (!dateString) return 'Unknown'
+      // Accepts ISO or MySQL TIMESTAMP; display in user's locale
+      try {
+        const d = new Date(typeof dateString === 'string' && dateString.includes(' ')
+          ? dateString.replace(' ', 'T')
+          : dateString)
+        if (isNaN(d)) return 'Unknown'
+        return d.toLocaleString()
+      } catch {
+        return 'Unknown'
+      }
+    }
+
+    // Expose method to open the create modal from parent
+    expose({ openAddWorkshop })
+
     onMounted(() => {
       fetchData()
     })
@@ -236,12 +298,16 @@ export default {
       editWorkshop,
       deleteWorkshop,
       closeAddWorkshopModal,
+      openAddWorkshop,
       closeEditWorkshopModal,
       onWorkshopCreated,
       onWorkshopUpdated,
+      lockWorkshop,
+      unlockWorkshop,
       showToast,
       closeToast,
-      formatDate
+      formatDate,
+      formatDateTime
     }
   }
 }

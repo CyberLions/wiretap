@@ -60,6 +60,31 @@
           />
         </div>
 
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">
+              Workshop Start (optional)
+            </label>
+            <input
+              v-model="form.lockout_start"
+              type="datetime-local"
+              class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <p class="text-xs text-gray-400 mt-1">Time will be interpreted in your local timezone</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">
+              Workshop End (optional)
+            </label>
+            <input
+              v-model="form.lockout_end"
+              type="datetime-local"
+              class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <p class="text-xs text-gray-400 mt-1">Time will be interpreted in your local timezone</p>
+          </div>
+        </div>
+
         <div class="flex justify-end space-x-3 pt-4">
           <button
             type="button"
@@ -112,8 +137,29 @@ export default {
       name: '',
       description: '',
       provider_id: '',
-      openstack_project_name: ''
+      openstack_project_name: '',
+      lockout_start: '',
+      lockout_end: ''
     })
+
+    const toDateTimeLocal = (value) => {
+      if (!value) return ''
+      // The backend returns MySQL TIMESTAMP ("YYYY-MM-DD HH:MM:SS") or ISO.
+      // Normalize to input[type=datetime-local] format: "YYYY-MM-DDTHH:MM" (no seconds)
+      try {
+        const date = new Date(typeof value === 'string' && value.includes(' ') ? value.replace(' ', 'T') + 'Z' : value)
+        if (isNaN(date)) return ''
+        const pad = (n) => String(n).padStart(2, '0')
+        const yyyy = date.getFullYear()
+        const mm = pad(date.getMonth() + 1)
+        const dd = pad(date.getDate())
+        const hh = pad(date.getHours())
+        const min = pad(date.getMinutes())
+        return `${yyyy}-${mm}-${dd}T${hh}:${min}`
+      } catch {
+        return ''
+      }
+    }
 
     const fetchProviders = async () => {
       try {
@@ -129,7 +175,9 @@ export default {
         name: '',
         description: '',
         provider_id: '',
-        openstack_project_name: ''
+        openstack_project_name: '',
+        lockout_start: '',
+        lockout_end: ''
       }
     }
 
@@ -139,7 +187,9 @@ export default {
           name: props.workshop.name || '',
           description: props.workshop.description || '',
           provider_id: props.workshop.provider_id || '',
-          openstack_project_name: props.workshop.openstack_project_name || ''
+          openstack_project_name: props.workshop.openstack_project_name || '',
+          lockout_start: toDateTimeLocal(props.workshop.lockout_start),
+          lockout_end: toDateTimeLocal(props.workshop.lockout_end)
         }
       }
     }
@@ -182,7 +232,8 @@ export default {
       loading,
       providers,
       form,
-      handleSubmit
+      handleSubmit,
+      toDateTimeLocal
     }
   }
 }

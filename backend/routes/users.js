@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcrypt');
 const { search, searchAll, insert, update, deleteFrom, executeQuery } = require('../utils/db');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const { getPendingTeamAssignments, processPendingTeamAssignments } = require('../managers/teams');
 
 /**
  * @swagger
@@ -13,6 +14,7 @@ const { authenticateToken, requireAdmin } = require('../middleware/auth');
  *     tags: [Users]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     responses:
  *       200:
  *         description: List of users
@@ -78,6 +80,7 @@ router.get('/', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Users]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -149,6 +152,7 @@ router.get('/:id', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Users]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -243,6 +247,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Users]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -288,7 +293,7 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
     
     for (const field of updateFields) {
       if (req.body[field] !== undefined) {
-        await update('users', field, req.body[field], 'id', id);
+        await update('users', field, req.body[field], 'id', [id]);
       }
     }
     
@@ -342,6 +347,7 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Users]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -392,6 +398,7 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Users]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -462,56 +469,77 @@ router.post('/generate', authenticateToken, requireAdmin, async (req, res) => {
     if (!competition) {
       return res.status(404).json({ error: 'Competition not found' });
     }
+    console.log('Competition found:', competition.name, 'ID:', competition.id);
     
     // Calculate number of teams needed
     const numTeams = Math.ceil(count / usersPerTeam);
+    console.log('Number of teams needed:', numTeams);
+    console.log('Users per team:', usersPerTeam);
+    console.log('Total users requested:', count);
     
-    // Create teams if they don't exist
+        // Create teams if they don't exist
     const createdTeams = [];
     for (let teamNum = 1; teamNum <= numTeams; teamNum++) {
       const teamName = `Team ${teamNum}`;
+      console.log('Creating team:', teamName);
       
-              // Check if team already exists for this competition
-        const existingTeam = await executeQuery(
-          'SELECT * FROM teams WHERE name = ? AND workshop_id = ?',
-          [teamName, competitionId]
-        );
+      // Check if team already exists for this competition
+      const existingTeam = await executeQuery(
+        'SELECT * FROM teams WHERE name = ? AND workshop_id = ?',
+        [teamName, competitionId]
+      );
+      
+      if (existingTeam.length === 0) {
+        const teamId = uuidv4();
+        const teamData = {
+          id: teamId,
+          name: teamName,
+          team_number: teamNum,
+          workshop_id: competitionId,
+          created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          updated_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
+        };
         
-        if (existingTeam.length === 0) {
-          const teamId = uuidv4();
-          const teamData = {
-            id: teamId,
-            name: teamName,
-            team_number: teamNum,
-            workshop_id: competitionId,
-            created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
-            updated_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
-          };
-          
-          await insert('teams', Object.keys(teamData), Object.values(teamData));
-          createdTeams.push({ id: teamId, name: teamName, team_number: teamNum });
-        } else {
-          createdTeams.push(existingTeam[0]);
-        }
+        await insert('teams', Object.keys(teamData), Object.values(teamData));
+        createdTeams.push({ id: teamId, name: teamName, team_number: teamNum });
+        console.log('Created new team:', teamName, 'with ID:', teamId);
+      } else {
+        createdTeams.push({
+          id: existingTeam[0].id,
+          name: existingTeam[0].name,
+          team_number: existingTeam[0].team_number
+        });
+        console.log('Using existing team:', teamName, 'with ID:', existingTeam[0].id);
+      }
     }
     
     const createdUsers = [];
-    let userIndex = 1;
     
     // Generate users and assign to teams
-    for (let teamIndex = 0; teamIndex < createdTeams.length && userIndex <= count; teamIndex++) {
+    let usersCreated = 0;
+    let currentUserIndex = 1;
+    
+    console.log('Starting user generation...');
+    console.log('Teams available:', createdTeams.length);
+    
+    for (let teamIndex = 0; teamIndex < createdTeams.length && usersCreated < count; teamIndex++) {
       const team = createdTeams[teamIndex];
-      const usersForThisTeam = Math.min(usersPerTeam, count - userIndex + 1);
+      const usersForThisTeam = Math.min(usersPerTeam, count - usersCreated);
+      console.log(`Processing team ${team.name}, users for this team: ${usersForThisTeam}`);
       
-      for (let i = 0; i < usersForThisTeam; i++) {
-        const username = `${prefix}${userIndex}`;
+      for (let i = 0; i < usersForThisTeam && usersCreated < count; i++) {
+        // Find a unique username
+        let username;
+        let attempts = 0;
+        do {
+          username = `${prefix}${currentUserIndex + attempts}`;
+          attempts++;
+          if (attempts > 100) {
+            throw new Error('Unable to generate unique username after 100 attempts');
+          }
+        } while (await search('users', 'username', username));
         
-        // Check if username already exists
-        const existingUser = await search('users', 'username', username);
-        if (existingUser) {
-          userIndex++;
-          continue; // Skip if user already exists
-        }
+        console.log(`Generated username: ${username} (attempts: ${attempts})`);
         
         // Generate password
         let userPassword;
@@ -534,7 +562,7 @@ router.post('/generate', authenticateToken, requireAdmin, async (req, res) => {
           username,
           email: `${username}@workshop.local`,
           first_name: `User`,
-          last_name: `${userIndex}`,
+          last_name: `${currentUserIndex + attempts - 1}`,
           role: 'USER',
           auth_type: 'PASSWORD',
           password_hash: passwordHash,
@@ -564,9 +592,16 @@ router.post('/generate', authenticateToken, requireAdmin, async (req, res) => {
           team_id: team.id
         });
         
-        userIndex++;
+        console.log(`Successfully created user: ${username} for team: ${team.name}`);
+        usersCreated++;
+        currentUserIndex++;
       }
     }
+    
+    console.log('Generated users:', createdUsers.length);
+    console.log('Generated teams:', createdTeams.length);
+    console.log('Created users:', createdUsers);
+    console.log('Created teams:', createdTeams);
     
     res.status(201).json({
       message: `${createdUsers.length} users generated successfully across ${createdTeams.length} teams`,
@@ -587,6 +622,7 @@ router.post('/generate', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Users]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -698,6 +734,7 @@ router.post('/bulk', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Users]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -747,6 +784,7 @@ router.get('/:id/teams', authenticateToken, async (req, res) => {
  *     tags: [Users]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -792,7 +830,7 @@ router.put('/:id/password', authenticateToken, requireAdmin, async (req, res) =>
     const passwordHash = await bcrypt.hash(password, 10);
     
     // Update the password
-    await update('users', 'password_hash', passwordHash, 'id', id);
+    await update('users', 'password_hash', passwordHash, 'id', [id]);
     
     res.json({ message: 'Password changed successfully' });
   } catch (error) {
@@ -809,6 +847,7 @@ router.put('/:id/password', authenticateToken, requireAdmin, async (req, res) =>
  *     tags: [Users]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -848,6 +887,165 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error deleting user:', error);
     res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/users/pending-teams/{email}:
+ *   get:
+ *     summary: Get pending team assignments for a user by email
+ *     tags: [Users]
+ *     security:
+ *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: email
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: email
+ *           description: Email address to check for pending team assignments
+ *     responses:
+ *       200:
+ *         description: List of pending team assignments
+ *       400:
+ *         description: Invalid email
+ */
+router.get('/pending-teams/:email', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { email } = req.params;
+    
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+    
+    const pendingAssignments = await getPendingTeamAssignments(email);
+    
+    // Add team details to each assignment
+    const assignmentsWithTeamDetails = await Promise.all(
+      pendingAssignments.map(async (assignment) => {
+        const team = await search('teams', 'id', assignment.team_id);
+        return {
+          ...assignment,
+          team: team ? { id: team.id, name: team.name, team_number: team.team_number } : null
+        };
+      })
+    );
+    
+    res.json({
+      email,
+      pending_assignments: assignmentsWithTeamDetails
+    });
+  } catch (error) {
+    console.error('Error fetching pending team assignments:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch pending team assignments' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/users/{id}/process-pending-teams:
+ *   post:
+ *     summary: Process pending team assignments for a user
+ *     tags: [Users]
+ *     security:
+ *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           description: User ID
+ *     responses:
+ *       200:
+ *         description: Pending team assignments processed
+ *       404:
+ *         description: User not found
+ */
+router.post('/:id/process-pending-teams', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Get user details
+    const user = await search('users', 'id', id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    if (!user.email) {
+      return res.status(400).json({ error: 'User has no email address' });
+    }
+    
+    // Process pending team assignments
+    const result = await processPendingTeamAssignments(id, user.email);
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error processing pending team assignments:', error);
+    res.status(500).json({ error: error.message || 'Failed to process pending team assignments' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/users/pending-teams/{email}/remove:
+ *   delete:
+ *     summary: Remove pending team assignment for a user by email
+ *     tags: [Users]
+ *     security:
+ *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: email
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: email
+ *           description: Email address
+ *       - in: query
+ *         name: team_id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           description: Team ID to remove from pending assignments
+ *     responses:
+ *       200:
+ *         description: Pending team assignment removed successfully
+ *       400:
+ *         description: Invalid input
+ *       404:
+ *         description: Pending assignment not found
+ */
+router.delete('/pending-teams/:email/remove', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { email } = req.params;
+    const { team_id } = req.query;
+    
+    if (!email || !team_id) {
+      return res.status(400).json({ error: 'Email and team_id are required' });
+    }
+    
+    // Check if pending assignment exists
+    const pendingAssignment = await searchAll('temp_user_team', ['email', 'team_id'], [email, team_id]);
+    if (!pendingAssignment || pendingAssignment.length === 0) {
+      return res.status(404).json({ error: 'Pending team assignment not found' });
+    }
+    
+    // Get the first (and should be only) pending assignment
+    const assignment = pendingAssignment[0];
+    
+    // Remove the pending assignment
+    await deleteFrom('temp_user_team', ['id'], [assignment.id]);
+    
+    res.json({ message: 'Pending team assignment removed successfully' });
+  } catch (error) {
+    console.error('Error removing pending team assignment:', error);
+    res.status(500).json({ error: error.message || 'Failed to remove pending team assignment' });
   }
 });
 

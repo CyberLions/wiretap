@@ -1,11 +1,11 @@
 <template>
   <div v-if="show" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div class="bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
+    <div class="bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[85vh] mx-4 flex flex-col">
       <div class="px-6 py-4 border-b border-gray-700">
         <h3 class="text-lg font-medium text-white">Edit Provider</h3>
       </div>
       
-      <form @submit.prevent="handleSubmit" class="p-6 space-y-4">
+      <form @submit.prevent="handleSubmit" class="p-6 space-y-4 overflow-y-auto flex-1">
         <div>
           <label class="block text-sm font-medium text-gray-300 mb-2">
             Name *
@@ -133,6 +133,18 @@
 
         <div>
           <label class="block text-sm font-medium text-gray-300 mb-2">
+            Proxy Through Host (optional)
+          </label>
+          <input
+            v-model="form.proxy_through_host"
+            type="text"
+            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="e.g., pritunl-nginx-proxy.pritunl"
+          />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">
             Enabled
           </label>
           <div class="flex items-center">
@@ -192,6 +204,15 @@ export default {
   emits: ['close', 'updated', 'error'],
   setup(props, { emit }) {
     const loading = ref(false)
+    const normalizeBoolean = (value) => {
+      if (typeof value === 'boolean') return value
+      if (typeof value === 'number') return value === 1
+      if (typeof value === 'string') {
+        const lower = value.toLowerCase()
+        return lower === 'true' || value === '1'
+      }
+      return false
+    }
     const form = ref({
       name: '',
       description: '',
@@ -203,7 +224,8 @@ export default {
       project_name: '',
       domain_name: '',
       domain_id: '',
-      enabled: true
+      enabled: true,
+      proxy_through_host: ''
     })
 
     const resetForm = () => {
@@ -218,7 +240,8 @@ export default {
         project_name: '',
         domain_name: '',
         domain_id: '',
-        enabled: true
+        enabled: true,
+        proxy_through_host: ''
       }
     }
 
@@ -235,7 +258,8 @@ export default {
           project_name: props.provider.project_name || '',
           domain_name: props.provider.domain_name || '',
           domain_id: props.provider.domain_id || '',
-          enabled: props.provider.enabled !== undefined ? props.provider.enabled : true
+          enabled: props.provider.enabled !== undefined ? normalizeBoolean(props.provider.enabled) : true,
+          proxy_through_host: props.provider.proxy_through_host || ''
         }
       }
     }

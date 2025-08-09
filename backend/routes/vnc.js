@@ -14,6 +14,7 @@ const { jwtConfig, vncConfig } = require('../utils/config');
  *     tags: [VNC]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: instanceId
@@ -58,13 +59,26 @@ router.post('/:instanceId/console', authenticateToken, canAccessInstance, async 
       return res.status(404).json({ error: 'Instance not found' });
     }
     
-    // Check if instance is locked
-    if (instance.locked && req.user.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Instance is locked' });
-    }
-    
     // Get workshop and provider info
     const workshop = await search('workshops', 'id', instance.workshop_id);
+
+    // Check if instance or workshop is locked (non-admins). Workshop window defines allowed access.
+    if (req.user.role !== 'ADMIN') {
+      if (instance.locked) {
+        return res.status(403).json({ error: 'Instance is locked' });
+      }
+      if (workshop) {
+        const now = new Date();
+        const start = workshop.lockout_start ? new Date(workshop.lockout_start) : null;
+        const end = workshop.lockout_end ? new Date(workshop.lockout_end) : null;
+        const hasStart = start && !isNaN(start);
+        const hasEnd = end && !isNaN(end);
+        // Access allowed only inside [start, end). Outside => locked
+        if ((hasStart && now < start) || (hasEnd && now >= end)) {
+          return res.status(403).json({ error: 'Workshop is currently locked' });
+        }
+      }
+    }
     const provider = await search('providers', 'id', workshop.provider_id);
     
     // Get console URL from OpenStack using project-specific authentication
@@ -121,6 +135,7 @@ router.post('/:instanceId/console', authenticateToken, canAccessInstance, async 
  *     tags: [VNC]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: instanceId
@@ -142,13 +157,25 @@ router.post('/:instanceId/console/refresh', authenticateToken, canAccessInstance
       return res.status(404).json({ error: 'Instance not found' });
     }
     
-    // Check if instance is locked
-    if (instance.locked && req.user.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Instance is locked' });
-    }
-    
     // Get workshop and provider info
     const workshop = await search('workshops', 'id', instance.workshop_id);
+
+    // Check if instance or workshop is locked (non-admins). Workshop window defines allowed access.
+    if (req.user.role !== 'ADMIN') {
+      if (instance.locked) {
+        return res.status(403).json({ error: 'Instance is locked' });
+      }
+      if (workshop) {
+        const now = new Date();
+        const start = workshop.lockout_start ? new Date(workshop.lockout_start) : null;
+        const end = workshop.lockout_end ? new Date(workshop.lockout_end) : null;
+        const hasStart = start && !isNaN(start);
+        const hasEnd = end && !isNaN(end);
+        if ((hasStart && now < start) || (hasEnd && now >= end)) {
+          return res.status(403).json({ error: 'Workshop is currently locked' });
+        }
+      }
+    }
     const provider = await search('providers', 'id', workshop.provider_id);
     
     // Get console URL from OpenStack using project-specific authentication
@@ -215,6 +242,7 @@ router.post('/:instanceId/console/refresh', authenticateToken, canAccessInstance
  *     tags: [VNC]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     responses:
  *       200:
  *         description: List of active sessions
@@ -242,6 +270,7 @@ router.get('/sessions', authenticateToken, async (req, res) => {
  *     tags: [VNC]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: sessionId

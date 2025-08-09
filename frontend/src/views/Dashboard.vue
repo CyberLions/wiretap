@@ -43,6 +43,16 @@
               class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+
+          <!-- Clear Filters Button -->
+          <div class="flex items-end">
+            <button
+              @click="clearFilters"
+              class="px-4 py-2 text-sm font-medium text-gray-300 bg-gray-700 border border-gray-600 rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200"
+            >
+              Clear Filters
+            </button>
+          </div>
         </div>
       </div>
 
@@ -145,7 +155,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import api from '@/services/api'
 import { LockClosedIcon, ComputerDesktopIcon } from '@heroicons/vue/24/outline'
@@ -230,6 +240,70 @@ export default {
       return allTeams.sort((a, b) => a.name.localeCompare(b.name))
     })
 
+    const FILTERS_STORAGE_KEY = 'dashboard_filters_v1'
+
+    const loadSavedFilters = () => {
+      try {
+        const raw = localStorage.getItem(FILTERS_STORAGE_KEY)
+        return raw ? JSON.parse(raw) : null
+      } catch (_) {
+        return null
+      }
+    }
+
+    const persistFilters = () => {
+      const payload = {
+        competition: selectedCompetition.value || '',
+        team: selectedTeam.value || '',
+        search: searchQuery.value || ''
+      }
+      try { 
+        localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(payload))
+      } catch (err) { 
+        console.error('Failed to save filters:', err)
+      }
+    }
+
+    const applySavedFiltersIfValid = () => {
+      const saved = loadSavedFilters()
+      if (!saved) return
+
+      let didChange = false
+
+      // Validate competition
+      if (saved.competition) {
+        const compId = saved.competition
+        const compIds = new Set(competitions.value.map(c => c.id))
+        if (compIds.has(compId)) {
+          selectedCompetition.value = compId
+        } else {
+          selectedCompetition.value = ''
+          didChange = true
+        }
+      }
+
+      // Validate team - wait for availableTeams to be computed
+      if (saved.team && availableTeams.value.length > 0) {
+        const teamId = saved.team
+        const teamIds = new Set(availableTeams.value.map(t => t.id))
+        if (teamIds.has(teamId)) {
+          selectedTeam.value = teamId
+        } else {
+          selectedTeam.value = ''
+          didChange = true
+        }
+      }
+
+      // Search is always valid
+      if (typeof saved.search === 'string') {
+        searchQuery.value = saved.search
+      }
+
+      if (didChange) {
+        persistFilters()
+      }
+    }
+
     const loadInstances = async () => {
       loading.value = true
       error.value = null
@@ -242,12 +316,29 @@ export default {
         
         instances.value = instancesResponse.data
         competitions.value = competitionsResponse.data
+        
+        // Use nextTick to ensure computed properties are updated before applying filters
+        await nextTick()
+        applySavedFiltersIfValid()
       } catch (err) {
         console.error('Error loading instances:', err)
         error.value = 'Failed to load instances. Please try again.'
       } finally {
         loading.value = false
       }
+    }
+
+    // Also apply filters when data changes (e.g., after refresh)
+    const refreshData = async () => {
+      await loadInstances()
+    }
+
+    // Clear all filters
+    const clearFilters = () => {
+      selectedCompetition.value = ''
+      selectedTeam.value = ''
+      searchQuery.value = ''
+      persistFilters()
     }
 
     const filterInstances = () => {
@@ -264,6 +355,12 @@ export default {
     }
 
     onMounted(() => {
+      // Persist on any change
+      watch([selectedCompetition, selectedTeam, searchQuery], () => {
+        persistFilters()
+      })
+
+      // Load data first, then apply saved filters
       loadInstances()
     })
 
@@ -280,6 +377,8 @@ export default {
       filteredInstances,
       getStatusColor,
       loadInstances,
+      refreshData,
+      clearFilters,
       filterInstances,
       parseIpAddresses
     }

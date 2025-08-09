@@ -20,6 +20,7 @@ const {
  *     tags: [Instances]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     responses:
  *       200:
  *         description: List of instances
@@ -51,6 +52,7 @@ router.get('/', authenticateToken, async (req, res) => {
  *     tags: [Instances]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     responses:
  *       200:
  *         description: Instances synced successfully
@@ -102,6 +104,7 @@ router.post('/sync', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Instances]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     responses:
  *       200:
  *         description: Scheduled sync triggered successfully
@@ -146,6 +149,7 @@ router.post('/sync-scheduled', authenticateToken, requireAdmin, async (req, res)
  *     tags: [Instances]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -182,6 +186,7 @@ router.get('/:id', authenticateToken, canAccessInstance, async (req, res) => {
  *     tags: [Instances]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -235,6 +240,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Instances]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -284,6 +290,7 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Instances]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -318,6 +325,7 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Instances]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -342,6 +350,23 @@ router.post('/:id/power/on', authenticateToken, canAccessInstance, async (req, r
     // Get workshop and provider info
     const workshop = await search('workshops', 'id', instance.workshop_id);
     const provider = await search('providers', 'id', workshop.provider_id);
+
+    // Enforce lockouts for non-admins (allowed only within [start, end))
+    if (req.user.role !== 'ADMIN') {
+      if (instance.locked) {
+        return res.status(403).json({ error: 'Instance is locked' });
+      }
+      if (workshop) {
+        const now = new Date();
+        const start = workshop.lockout_start ? new Date(workshop.lockout_start) : null;
+        const end = workshop.lockout_end ? new Date(workshop.lockout_end) : null;
+        const hasStart = start && !isNaN(start);
+        const hasEnd = end && !isNaN(end);
+        if ((hasStart && now < start) || (hasEnd && now >= end)) {
+          return res.status(403).json({ error: 'Workshop is currently locked' });
+        }
+      }
+    }
     
     // Power on instance via OpenStack
     const { powerOnInstance } = require('../managers/openstack');
@@ -362,6 +387,7 @@ router.post('/:id/power/on', authenticateToken, canAccessInstance, async (req, r
  *     tags: [Instances]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -386,6 +412,23 @@ router.post('/:id/power/off', authenticateToken, canAccessInstance, async (req, 
     // Get workshop and provider info
     const workshop = await search('workshops', 'id', instance.workshop_id);
     const provider = await search('providers', 'id', workshop.provider_id);
+
+    // Enforce lockouts for non-admins (allowed only within [start, end))
+    if (req.user.role !== 'ADMIN') {
+      if (instance.locked) {
+        return res.status(403).json({ error: 'Instance is locked' });
+      }
+      if (workshop) {
+        const now = new Date();
+        const start = workshop.lockout_start ? new Date(workshop.lockout_start) : null;
+        const end = workshop.lockout_end ? new Date(workshop.lockout_end) : null;
+        const hasStart = start && !isNaN(start);
+        const hasEnd = end && !isNaN(end);
+        if ((hasStart && now < start) || (hasEnd && now >= end)) {
+          return res.status(403).json({ error: 'Workshop is currently locked' });
+        }
+      }
+    }
     
     // Power off instance via OpenStack
     const { powerOffInstance } = require('../managers/openstack');
@@ -406,6 +449,7 @@ router.post('/:id/power/off', authenticateToken, canAccessInstance, async (req, 
  *     tags: [Instances]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -441,6 +485,23 @@ router.post('/:id/power/restart', authenticateToken, canAccessInstance, async (r
     // Get workshop and provider info
     const workshop = await search('workshops', 'id', instance.workshop_id);
     const provider = await search('providers', 'id', workshop.provider_id);
+
+    // Enforce lockouts for non-admins (allowed only within [start, end))
+    if (req.user.role !== 'ADMIN') {
+      if (instance.locked) {
+        return res.status(403).json({ error: 'Instance is locked' });
+      }
+      if (workshop) {
+        const now = new Date();
+        const start = workshop.lockout_start ? new Date(workshop.lockout_start) : null;
+        const end = workshop.lockout_end ? new Date(workshop.lockout_end) : null;
+        const hasStart = start && !isNaN(start);
+        const hasEnd = end && !isNaN(end);
+        if ((hasStart && now < start) || (hasEnd && now >= end)) {
+          return res.status(403).json({ error: 'Workshop is currently locked' });
+        }
+      }
+    }
     
     // Restart instance via OpenStack
     const { restartInstance } = require('../managers/openstack');
@@ -461,6 +522,7 @@ router.post('/:id/power/restart', authenticateToken, canAccessInstance, async (r
  *     tags: [Instances]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -505,6 +567,7 @@ router.get('/:id/status', authenticateToken, canAccessInstance, async (req, res)
  *     tags: [Instances]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -529,6 +592,23 @@ router.post('/:id/power-on', authenticateToken, canAccessInstance, async (req, r
     // Get workshop and provider info
     const workshop = await search('workshops', 'id', instance.workshop_id);
     const provider = await search('providers', 'id', workshop.provider_id);
+
+    // Enforce lockouts for non-admins (allowed only within [start, end))
+    if (req.user.role !== 'ADMIN') {
+      if (instance.locked) {
+        return res.status(403).json({ error: 'Instance is locked' });
+      }
+      if (workshop) {
+        const now = new Date();
+        const start = workshop.lockout_start ? new Date(workshop.lockout_start) : null;
+        const end = workshop.lockout_end ? new Date(workshop.lockout_end) : null;
+        const hasStart = start && !isNaN(start);
+        const hasEnd = end && !isNaN(end);
+        if ((hasStart && now < start) || (hasEnd && now >= end)) {
+          return res.status(403).json({ error: 'Workshop is currently locked' });
+        }
+      }
+    }
     
     // Power on instance via OpenStack
     const { powerOnInstance } = require('../managers/openstack');
@@ -549,6 +629,7 @@ router.post('/:id/power-on', authenticateToken, canAccessInstance, async (req, r
  *     tags: [Instances]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -573,6 +654,23 @@ router.post('/:id/power-off', authenticateToken, canAccessInstance, async (req, 
     // Get workshop and provider info
     const workshop = await search('workshops', 'id', instance.workshop_id);
     const provider = await search('providers', 'id', workshop.provider_id);
+
+    // Enforce lockouts for non-admins (allowed only within [start, end))
+    if (req.user.role !== 'ADMIN') {
+      if (instance.locked) {
+        return res.status(403).json({ error: 'Instance is locked' });
+      }
+      if (workshop) {
+        const now = new Date();
+        const start = workshop.lockout_start ? new Date(workshop.lockout_start) : null;
+        const end = workshop.lockout_end ? new Date(workshop.lockout_end) : null;
+        const hasStart = start && !isNaN(start);
+        const hasEnd = end && !isNaN(end);
+        if ((hasStart && now < start) || (hasEnd && now >= end)) {
+          return res.status(403).json({ error: 'Workshop is currently locked' });
+        }
+      }
+    }
     
     // Power off instance via OpenStack
     const { powerOffInstance } = require('../managers/openstack');
@@ -593,6 +691,7 @@ router.post('/:id/power-off', authenticateToken, canAccessInstance, async (req, 
  *     tags: [Instances]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -629,6 +728,21 @@ router.post('/:id/reboot', authenticateToken, canAccessInstance, async (req, res
     // Get workshop and provider info
     const workshop = await search('workshops', 'id', instance.workshop_id);
     const provider = await search('providers', 'id', workshop.provider_id);
+
+    // Enforce lockouts for non-admins
+    if (req.user.role !== 'ADMIN') {
+      if (instance.locked) {
+        return res.status(403).json({ error: 'Instance is locked' });
+      }
+      if (workshop && workshop.lockout_start && workshop.lockout_end) {
+        const now = new Date();
+        const start = new Date(workshop.lockout_start);
+        const end = new Date(workshop.lockout_end);
+        if (!isNaN(start) && !isNaN(end) && now >= start && now < end) {
+          return res.status(403).json({ error: 'Workshop is locked during the scheduled window' });
+        }
+      }
+    }
     
     // Restart instance via OpenStack
     const { restartInstance } = require('../managers/openstack');
@@ -650,6 +764,7 @@ router.post('/:id/reboot', authenticateToken, canAccessInstance, async (req, res
  *     tags: [Instances]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -696,6 +811,7 @@ router.post('/:id/sync', authenticateToken, canAccessInstance, async (req, res) 
  *     tags: [Instances]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -727,6 +843,21 @@ router.get('/:id/console', authenticateToken, canAccessInstance, async (req, res
     // Get workshop and provider info
     const workshop = await search('workshops', 'id', instance.workshop_id);
     const provider = await search('providers', 'id', workshop.provider_id);
+    
+    // Enforce lockouts for non-admins
+    if (req.user.role !== 'ADMIN') {
+      if (instance.locked) {
+        return res.status(403).json({ error: 'Instance is locked' });
+      }
+      if (workshop && workshop.lockout_start && workshop.lockout_end) {
+        const now = new Date();
+        const start = new Date(workshop.lockout_start);
+        const end = new Date(workshop.lockout_end);
+        if (!isNaN(start) && !isNaN(end) && now >= start && now < end) {
+          return res.status(403).json({ error: 'Workshop is locked during the scheduled window' });
+        }
+      }
+    }
     
     // Get console URL from OpenStack using project-specific authentication
     const { getConsoleUrlForProject } = require('../managers/openstack');

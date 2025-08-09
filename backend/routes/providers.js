@@ -12,6 +12,7 @@ const { authenticateToken, requireAdmin } = require('../middleware/auth');
  *     tags: [Providers]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     responses:
  *       200:
  *         description: List of providers
@@ -61,6 +62,7 @@ router.get('/', authenticateToken, async (req, res) => {
  *     tags: [Providers]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -100,6 +102,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
  *     tags: [Providers]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -147,6 +150,10 @@ router.get('/:id', authenticateToken, async (req, res) => {
  *               domain_id:
  *                 type: string
  *                 example: "default"
+  *               proxy_through_host:
+  *                 type: string
+  *                 description: "Optional DNS/IP host to proxy OpenStack API requests through (SNI/Host preserved)"
+  *                 example: "pritunl-proxy.pritunl"
  *     responses:
  *       201:
  *         description: Provider created successfully
@@ -165,7 +172,8 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
       project_name,
       region_name,
       domain_name,
-      domain_id
+      domain_id,
+      proxy_through_host
     } = req.body;
     
     if (!name || !auth_url || !username || !password || !project_name || !region_name) {
@@ -193,6 +201,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
       region_name,
       domain_name: domain_name || null,
       domain_id: domain_id || null,
+      proxy_through_host: proxy_through_host || null,
       enabled: true
     };
     
@@ -216,6 +225,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Providers]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -271,12 +281,12 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
     
     const updateFields = [
       'name', 'description', 'auth_url', 'identity_version', 'username', 'password',
-      'project_name', 'region_name', 'domain_name', 'domain_id', 'enabled'
+      'project_name', 'region_name', 'domain_name', 'domain_id', 'proxy_through_host', 'enabled'
     ];
     
     for (const field of updateFields) {
       if (req.body[field] !== undefined) {
-        await update('providers', field, req.body[field], 'id', id);
+        await update('providers', field, req.body[field], 'id', [id]);
       }
     }
     
@@ -298,6 +308,7 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Providers]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -344,6 +355,7 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Providers]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -384,6 +396,7 @@ router.post('/:id/test', authenticateToken, requireAdmin, async (req, res) => {
  *     tags: [Providers]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -485,6 +498,7 @@ router.get('/:id/instances', authenticateToken, requireAdmin, async (req, res) =
  *     tags: [Providers]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -557,6 +571,7 @@ router.post('/:id/ingest', authenticateToken, requireAdmin, async (req, res) => 
  *     tags: [Providers]
  *     security:
  *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
  *     parameters:
  *       - in: path
  *         name: id

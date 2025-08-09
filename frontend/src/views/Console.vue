@@ -804,10 +804,10 @@ iframe {
 .rocket-body {
   width: 40px;
   height: 80px;
-  background: linear-gradient(45deg, #ff6b6b, #ff8e8e);
+  background: linear-gradient(45deg, #3b82f6, #60a5fa);
   border-radius: 50% 50% 20% 20%;
   position: relative;
-  box-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
 }
 
 .rocket-nose {
@@ -819,7 +819,7 @@ iframe {
   height: 0;
   border-left: 20px solid transparent;
   border-right: 20px solid transparent;
-  border-bottom: 25px solid #ff6b6b;
+  border-bottom: 25px solid #3b82f6;
 }
 
 .rocket-window {
@@ -847,7 +847,7 @@ iframe {
   position: absolute;
   width: 20px;
   height: 15px;
-  background: #ff4757;
+  background: #1d4ed8;
   border-radius: 0 0 10px 10px;
 }
 

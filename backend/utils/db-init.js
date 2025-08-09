@@ -17,6 +17,7 @@ async function initializeTables(connection) {
                 region_name VARCHAR(100) NOT NULL,
                 domain_name VARCHAR(255),
                 domain_id VARCHAR(255),
+                proxy_through_host VARCHAR(255),
                 enabled BOOLEAN DEFAULT true,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -34,12 +35,39 @@ async function initializeTables(connection) {
                 openstack_project_id VARCHAR(255) NOT NULL,
                 openstack_project_name VARCHAR(255) NOT NULL,
                 enabled BOOLEAN DEFAULT true,
+                lockout_start TIMESTAMP NULL,
+                lockout_end TIMESTAMP NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 UNIQUE KEY unique_workshop_name (name),
                 FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
         `);
+
+        // Ensure lockout window columns exist for existing deployments (MySQL variant without IF NOT EXISTS)
+        const [lockoutStartCol] = await connection.query("SHOW COLUMNS FROM workshops LIKE 'lockout_start'");
+        if (!Array.isArray(lockoutStartCol) || lockoutStartCol.length === 0) {
+            await connection.query(`
+                ALTER TABLE workshops
+                ADD COLUMN lockout_start TIMESTAMP NULL
+            `);
+        }
+        const [lockoutEndCol] = await connection.query("SHOW COLUMNS FROM workshops LIKE 'lockout_end'");
+        if (!Array.isArray(lockoutEndCol) || lockoutEndCol.length === 0) {
+            await connection.query(`
+                ALTER TABLE workshops
+                ADD COLUMN lockout_end TIMESTAMP NULL
+            `);
+        }
+
+        // Ensure proxy_through_host column exists on providers for existing deployments
+        const [proxyThroughHostCol] = await connection.query("SHOW COLUMNS FROM providers LIKE 'proxy_through_host'");
+        if (!Array.isArray(proxyThroughHostCol) || proxyThroughHostCol.length === 0) {
+            await connection.query(`
+                ALTER TABLE providers
+                ADD COLUMN proxy_through_host VARCHAR(255) NULL
+            `);
+        }
 
         // Create teams table
         await connection.query(`
@@ -92,6 +120,18 @@ async function initializeTables(connection) {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
         `);
 
+        // Create temp_user_team table for storing team assignments for non-existent users
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS temp_user_team (
+                id VARCHAR(36) PRIMARY KEY,
+                email VARCHAR(255) NOT NULL,
+                team_id VARCHAR(36) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY unique_email_team (email, team_id),
+                FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+        `);
+
         // Create instances table (VMs)
         await connection.query(`
             CREATE TABLE IF NOT EXISTS instances (
@@ -131,20 +171,7 @@ async function initializeTables(connection) {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
         `);
 
-        // Create audit_log table
-        await connection.query(`
-            CREATE TABLE IF NOT EXISTS audit_log (
-                id VARCHAR(36) PRIMARY KEY,
-                user_id VARCHAR(36),
-                action VARCHAR(255) NOT NULL,
-                resource_type VARCHAR(100) NOT NULL,
-                resource_id VARCHAR(36),
-                details TEXT,
-                ip_address VARCHAR(45),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-        `);
+
 
         // Create logs table for system activity
         await connection.query(`
@@ -224,8 +251,8 @@ async function createDefaultProvider(connection) {
             const providerId = uuidv4();
             
             await connection.query(`
-                INSERT INTO providers (id, name, description, auth_url, identity_version, username, password, project_name, region_name)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO providers (id, name, description, auth_url, identity_version, username, password, project_name, region_name, proxy_through_host)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `, [
                 providerId, 
                 'Default OpenStack', 
@@ -235,7 +262,8 @@ async function createDefaultProvider(connection) {
                 'admin', 
                 'password', 
                 'admin', 
-                'RegionOne'
+                'RegionOne',
+                null
             ]);
             
             console.log('✓ Default OpenStack provider created');

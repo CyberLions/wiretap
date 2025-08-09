@@ -98,7 +98,7 @@ async function updateProvider(id, updateData) {
   
   for (const field of updateFields) {
     if (updateData[field] !== undefined) {
-      await update('providers', field, updateData[field], 'id', id);
+              await update('providers', field, updateData[field], 'id', [id]);
     }
   }
   
@@ -154,7 +154,7 @@ async function toggleProviderStatus(id, enabled) {
     throw new Error('Provider not found');
   }
   
-  await update('providers', 'enabled', enabled, 'id', id);
+  await update('providers', 'enabled', enabled, 'id', [id]);
   
   return { message: `Provider ${enabled ? 'enabled' : 'disabled'} successfully` };
 }
