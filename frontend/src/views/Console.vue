@@ -176,12 +176,14 @@
         >
           <!-- VNC Console iframe -->
           <iframe
-            v-if="consoleUrl"
-            :src="consoleUrl"
+            v-if="secureConsoleUrl"
+            :src="secureConsoleUrl"
             class="w-full h-full border-0"
             allowfullscreen
             frameborder="0"
             scrolling="no"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+            referrerpolicy="no-referrer"
           ></iframe>
           <div v-else class="w-full h-full flex items-center justify-center text-green-400 font-mono text-sm">
             <div class="text-center">
@@ -334,6 +336,18 @@ export default {
       show: false,
       message: '',
       type: 'success'
+    })
+
+    // Ensure console URL is always HTTPS to prevent mixed content errors
+    const secureConsoleUrl = computed(() => {
+      if (!consoleUrl.value) return ''
+      
+      // Force HTTPS for VNC console URLs to prevent mixed content errors
+      if (consoleUrl.value.startsWith('http://')) {
+        return consoleUrl.value.replace('http://', 'https://')
+      }
+      
+      return consoleUrl.value
     })
 
     const isLocked = computed(() => {
@@ -612,6 +626,7 @@ export default {
       isRebootMenuOpen,
       consoleContainer,
       consoleUrl,
+      secureConsoleUrl,
       isLocked,
       canShowConsole,
       isFullscreenRoute,

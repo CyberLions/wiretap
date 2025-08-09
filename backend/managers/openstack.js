@@ -454,6 +454,20 @@ async function restartInstance(provider, instance, hard = false) {
 }
 
 /**
+ * Force HTTPS for console URLs to prevent mixed content errors
+ */
+function forceHttpsForConsoleUrl(url, consoleType) {
+  if (!url) return url;
+  
+  // Force HTTPS for VNC/NoVNC URLs to prevent mixed content errors
+  if ((consoleType.toUpperCase() === 'VNC' || consoleType.toUpperCase() === 'NOVNC') && url.startsWith('http://')) {
+    url = url.replace('http://', 'https://');
+  }
+  
+  return url;
+}
+
+/**
  * Get console URL for instance
  */
 async function getConsoleUrl(provider, instance, consoleType = 'NOVNC') {
@@ -493,6 +507,9 @@ async function getConsoleUrl(provider, instance, consoleType = 'NOVNC') {
     });
     
     let consoleUrl = response.remote_console?.url;
+    
+    // Force HTTPS for VNC URLs to prevent mixed content errors
+    consoleUrl = forceHttpsForConsoleUrl(consoleUrl, consoleType);
     
     // Add auto-scaling to NoVNC URLs like compsole does
     if ((consoleType.toUpperCase() === 'VNC' || consoleType.toUpperCase() === 'NOVNC') && consoleUrl && !consoleUrl.includes('scale=true')) {
@@ -546,6 +563,9 @@ async function getConsoleUrlForProject(provider, projectName, instance, consoleT
     });
     
     let consoleUrl = response.remote_console?.url;
+    
+    // Force HTTPS for VNC URLs to prevent mixed content errors
+    consoleUrl = forceHttpsForConsoleUrl(consoleUrl, consoleType);
     
     // Add auto-scaling to NoVNC URLs like compsole does
     if ((consoleType.toUpperCase() === 'VNC' || consoleType.toUpperCase() === 'NOVNC') && consoleUrl && !consoleUrl.includes('scale=true')) {

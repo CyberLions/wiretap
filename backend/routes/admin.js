@@ -117,17 +117,19 @@ const { v4: uuidv4 } = require('uuid');
  *           type: boolean
  *           description: Whether the workshop is currently locked
  *         nextAction:
- *           type: object
- *           nullable: true
- *           properties:
- *             type:
- *               type: string
- *               enum: [lock, unlock]
- *               description: Type of next action
- *             at:
- *               type: string
- *               format: date-time
- *               description: When the next action will occur
+ *           oneOf:
+ *             - type: object
+ *               properties:
+ *                 type:
+ *                   type: string
+ *                   enum: [lock, unlock]
+ *                   description: Type of next action
+ *                 at:
+ *                   type: string
+ *                   format: date-time
+ *                   description: When the next action will occur
+ *               required: [type, at]
+ *             - type: "null"
  */
 
 /**
@@ -979,17 +981,19 @@ router.post('/workshops/:id/unlock', authenticateToken, requireAdmin, async (req
  *                         type: boolean
  *                         description: Whether the workshop is currently locked
  *                       nextAction:
- *                         type: object
- *                         nullable: true
- *                         properties:
- *                           type:
- *                             type: string
- *                             enum: [lock, unlock]
- *                             description: Type of next action
- *                           at:
- *                             type: string
- *                             format: date-time
- *                             description: When the next action will occur
+ *                         oneOf:
+ *                           - type: object
+ *                             properties:
+ *                               type:
+ *                                 type: string
+ *                                 enum: [lock, unlock]
+ *                                 description: Type of next action
+ *                               at:
+ *                                 type: string
+ *                                 format: date-time
+ *                                 description: When the next action will occur
+ *                             required: [type, at]
+ *                           - type: "null"
  *       500:
  *         description: Internal server error
  *         content:
@@ -1070,7 +1074,6 @@ router.get('/lockouts', authenticateToken, requireAdmin, async (req, res) => {
  * /api/admin/logs/cleanup:
  *   post:
  *     summary: Clean up old logs
- *     description: Deletes logs older than a specified number of days (default: 7 days)
  *     tags: [Admin]
  *     security:
  *       - BearerAuth: []
