@@ -6,6 +6,7 @@ const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
 const { openidConfig, jwtConfig } = require('../utils/config');
 const { search, insert, update } = require('../utils/db');
+const { processPendingTeamAssignments } = require('../managers/teams');
 
 /**
  * @swagger
@@ -194,6 +195,18 @@ router.get('/openid/callback', async (req, res) => {
       
       await insert('users', Object.keys(userData), Object.values(userData));
       user = await search('users', 'id', userId);
+      
+      // Process any pending team assignments for this user
+      let teamAssignmentResult = null;
+      if (userData.email) {
+        try {
+          teamAssignmentResult = await processPendingTeamAssignments(userId, userData.email);
+          console.log('Processed pending team assignments for OpenID user:', teamAssignmentResult);
+        } catch (error) {
+          console.error('Error processing pending team assignments for OpenID user:', error);
+          // Don't fail user creation if team assignment fails
+        }
+      }
     } else {
       // Update existing user info and role
       const updateData = {
@@ -204,13 +217,26 @@ router.get('/openid/callback', async (req, res) => {
         role: userRole
       };
       
-          await update('users', 'email', updateData.email, 'id', [user.id]);
-    await update('users', 'first_name', updateData.first_name, 'id', [user.id]);
-    await update('users', 'last_name', updateData.last_name, 'id', [user.id]);
-    await update('users', 'openid_groups', updateData.openid_groups, 'id', [user.id]);
-    await update('users', 'role', updateData.role, 'id', [user.id]);
+      await update('users', 'email', updateData.email, 'id', [user.id]);
+      await update('users', 'first_name', updateData.first_name, 'id', [user.id]);
+      await update('users', 'last_name', updateData.last_name, 'id', [user.id]);
+      await update('users', 'openid_groups', updateData.openid_groups, 'id', [user.id]);
+      await update('users', 'role', updateData.role, 'id', [user.id]);
       
       user = await search('users', 'id', user.id);
+      
+      // Process any pending team assignments for existing user (in case they were added after account creation)
+      if (updateData.email) {
+        try {
+          const teamAssignmentResult = await processPendingTeamAssignments(user.id, updateData.email);
+          if (teamAssignmentResult && teamAssignmentResult.results && teamAssignmentResult.results.length > 0) {
+            console.log('Processed pending team assignments for existing OpenID user:', teamAssignmentResult);
+          }
+        } catch (error) {
+          console.error('Error processing pending team assignments for existing OpenID user:', error);
+          // Don't fail user update if team assignment fails
+        }
+      }
     }
     
     // Generate JWT token
