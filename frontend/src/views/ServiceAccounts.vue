@@ -4,12 +4,6 @@
       <div class="px-6 py-4 border-b border-gray-700">
         <div class="flex items-center justify-between">
           <h3 class="text-lg font-medium text-white">Service Account Management</h3>
-          <button
-            @click="openAddServiceAccount"
-            class="btn btn-primary text-sm"
-          >
-            Add Service Account
-          </button>
         </div>
       </div>
       <div class="p-6">
