@@ -92,7 +92,7 @@ async function getAuthToken(provider) {
   }
   
   try {
-    // Construct auth URL like compsole does - append identity version
+    // Construct auth URL - append identity version
     const identityVersion = provider.identity_version || 'v3';
     const authUrl = provider.auth_url.endsWith('/') 
       ? `${provider.auth_url}${identityVersion}`
@@ -472,7 +472,7 @@ function forceHttpsForConsoleUrl(url, consoleType) {
  */
 async function getConsoleUrl(provider, instance, consoleType = 'NOVNC') {
   try {
-    // Map console types to OpenStack remote console types (matching compsole)
+    // Map console types to OpenStack remote console types
     let protocol, type;
     switch (consoleType.toUpperCase()) {
       case 'SERIAL':
@@ -511,7 +511,7 @@ async function getConsoleUrl(provider, instance, consoleType = 'NOVNC') {
     // Force HTTPS for VNC URLs to prevent mixed content errors
     consoleUrl = forceHttpsForConsoleUrl(consoleUrl, consoleType);
     
-    // Add auto-scaling to NoVNC URLs like compsole does
+    // Add auto-scaling to NoVNC URLs
     if ((consoleType.toUpperCase() === 'VNC' || consoleType.toUpperCase() === 'NOVNC') && consoleUrl && !consoleUrl.includes('scale=true')) {
       consoleUrl += '&scale=true';
     }
@@ -528,7 +528,7 @@ async function getConsoleUrl(provider, instance, consoleType = 'NOVNC') {
  */
 async function getConsoleUrlForProject(provider, projectName, instance, consoleType = 'NOVNC') {
   try {
-    // Map console types to OpenStack remote console types (matching compsole)
+    // Map console types to OpenStack remote console types 
     let protocol, type;
     switch (consoleType.toUpperCase()) {
       case 'SERIAL':
@@ -567,7 +567,7 @@ async function getConsoleUrlForProject(provider, projectName, instance, consoleT
     // Force HTTPS for VNC URLs to prevent mixed content errors
     consoleUrl = forceHttpsForConsoleUrl(consoleUrl, consoleType);
     
-    // Add auto-scaling to NoVNC URLs like compsole does
+    // Add auto-scaling to NoVNC URLs
     if ((consoleType.toUpperCase() === 'VNC' || consoleType.toUpperCase() === 'NOVNC') && consoleUrl && !consoleUrl.includes('scale=true')) {
       consoleUrl += '&scale=true';
     }
@@ -594,7 +594,7 @@ async function getAuthTokenForProject(provider, projectName) {
   }
   
   try {
-    // Construct auth URL like compsole does - append identity version
+    // Construct auth URL - append identity version
     const identityVersion = provider.identity_version || 'v3';
     const authUrl = provider.auth_url.endsWith('/') 
       ? `${provider.auth_url}${identityVersion}`
