@@ -11,8 +11,8 @@ async function getAllInstances(user, filters = {}) {
   let whereConditions = [];
   let params = [];
   
-  // If user is admin, show all instances
-  if (user.role === 'ADMIN') {
+  // If user is admin or service account, show all instances
+  if (user.role === 'ADMIN' || user.role === 'SERVICE_ACCOUNT') {
     let baseQuery = `
       SELECT i.*, 
              w.name as workshop_name,

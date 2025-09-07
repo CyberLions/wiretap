@@ -7,8 +7,8 @@ const { search, searchAll, insert, update, deleteFrom, executeQuery } = require(
 async function getAllWorkshops(user) {
   let workshops;
   
-  // If user is admin, show all workshops
-  if (user.role === 'ADMIN') {
+  // If user is admin or service account, show all workshops
+  if (user.role === 'ADMIN' || user.role === 'SERVICE_ACCOUNT') {
     workshops = await searchAll('workshops', [], [], { orderBy: 'name' });
   } else {
     // Get workshops that user has access to
@@ -236,9 +236,9 @@ async function getWorkshopStats() {
  * Check if user can access workshop
  */
 async function canUserAccessWorkshop(userId, workshopId) {
-  // Admin can access all workshops
+  // Admin and service accounts can access all workshops
   const user = await search('users', 'id', userId);
-  if (user && user.role === 'ADMIN') {
+  if (user && (user.role === 'ADMIN' || user.role === 'SERVICE_ACCOUNT')) {
     return true;
   }
   

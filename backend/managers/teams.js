@@ -7,8 +7,8 @@ const { search, searchAll, insert, update, deleteFrom, executeQuery } = require(
 async function getAllTeams(user) {
   let teams;
   
-  // If user is admin, show all teams
-  if (user.role === 'ADMIN') {
+  // If user is admin or service account, show all teams
+  if (user.role === 'ADMIN' || user.role === 'SERVICE_ACCOUNT') {
     teams = await searchAll('teams', [], [], { orderBy: 'team_number' });
   } else {
     // Get teams that user belongs to
@@ -397,9 +397,9 @@ async function getTeamStats() {
  * Check if user can access team
  */
 async function canUserAccessTeam(userId, teamId) {
-  // Admin can access all teams
+  // Admin and service accounts can access all teams
   const user = await search('users', 'id', userId);
-  if (user && user.role === 'ADMIN') {
+  if (user && (user.role === 'ADMIN' || user.role === 'SERVICE_ACCOUNT')) {
     return true;
   }
   

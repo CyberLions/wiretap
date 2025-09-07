@@ -41,8 +41,8 @@ router.get('/', authenticateToken, async (req, res) => {
   try {
     let workshops;
     
-    // If user is admin, show all workshops with provider information
-    if (req.user.role === 'ADMIN') {
+    // If user is admin or service account, show all workshops with provider information
+    if (req.user.role === 'ADMIN' || req.user.role === 'SERVICE_ACCOUNT') {
       workshops = await executeQuery(`
         SELECT w.*, p.name as provider_name
         FROM workshops w

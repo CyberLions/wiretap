@@ -104,8 +104,8 @@ const canAccessWorkshop = async (req, res, next) => {
     const { id: workshopId } = req.params;
     const userId = req.user.id;
     
-    // Admins can access all workshops
-    if (req.user.role === 'ADMIN') {
+    // Admins and service accounts can access all workshops
+    if (req.user.role === 'ADMIN' || req.user.role === 'SERVICE_ACCOUNT') {
       return next();
     }
     
@@ -142,8 +142,8 @@ const canAccessInstance = async (req, res, next) => {
     const instanceIdToUse = instanceId || id;
     const userId = req.user.id;
     
-    // Admins can access all instances
-    if (req.user.role === 'ADMIN') {
+    // Admins and service accounts can access all instances
+    if (req.user.role === 'ADMIN' || req.user.role === 'SERVICE_ACCOUNT') {
       return next();
     }
     
@@ -183,8 +183,8 @@ const canAccessTeam = async (req, res, next) => {
     const { teamId } = req.params;
     const userId = req.user.id;
     
-    // Admins can access all teams
-    if (req.user.role === 'ADMIN') {
+    // Admins and service accounts can access all teams
+    if (req.user.role === 'ADMIN' || req.user.role === 'SERVICE_ACCOUNT') {
       return next();
     }
     

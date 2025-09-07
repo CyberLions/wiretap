@@ -22,8 +22,8 @@ router.get('/', authenticateToken, async (req, res) => {
   try {
     let teams;
     
-    // If user is admin, show all teams
-    if (req.user.role === 'ADMIN') {
+    // If user is admin or service account, show all teams
+    if (req.user.role === 'ADMIN' || req.user.role === 'SERVICE_ACCOUNT') {
       teams = await searchAll('teams', [], [], { orderBy: 'team_number' });
     } else {
       // Get teams that user belongs to
