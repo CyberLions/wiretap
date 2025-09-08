@@ -352,7 +352,7 @@ router.post('/:id/power/on', authenticateToken, canAccessInstance, async (req, r
     const provider = await search('providers', 'id', workshop.provider_id);
 
     // Enforce lockouts for non-admins (allowed only within [start, end))
-    if (req.user.role !== 'ADMIN') {
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'SERVICE_ACCOUNT') {
       if (instance.locked) {
         return res.status(403).json({ error: 'Instance is locked' });
       }
@@ -414,7 +414,7 @@ router.post('/:id/power/off', authenticateToken, canAccessInstance, async (req, 
     const provider = await search('providers', 'id', workshop.provider_id);
 
     // Enforce lockouts for non-admins (allowed only within [start, end))
-    if (req.user.role !== 'ADMIN') {
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'SERVICE_ACCOUNT') {
       if (instance.locked) {
         return res.status(403).json({ error: 'Instance is locked' });
       }
@@ -487,7 +487,7 @@ router.post('/:id/power/restart', authenticateToken, canAccessInstance, async (r
     const provider = await search('providers', 'id', workshop.provider_id);
 
     // Enforce lockouts for non-admins (allowed only within [start, end))
-    if (req.user.role !== 'ADMIN') {
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'SERVICE_ACCOUNT') {
       if (instance.locked) {
         return res.status(403).json({ error: 'Instance is locked' });
       }
@@ -594,7 +594,7 @@ router.post('/:id/power-on', authenticateToken, canAccessInstance, async (req, r
     const provider = await search('providers', 'id', workshop.provider_id);
 
     // Enforce lockouts for non-admins (allowed only within [start, end))
-    if (req.user.role !== 'ADMIN') {
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'SERVICE_ACCOUNT') {
       if (instance.locked) {
         return res.status(403).json({ error: 'Instance is locked' });
       }
@@ -656,7 +656,7 @@ router.post('/:id/power-off', authenticateToken, canAccessInstance, async (req, 
     const provider = await search('providers', 'id', workshop.provider_id);
 
     // Enforce lockouts for non-admins (allowed only within [start, end))
-    if (req.user.role !== 'ADMIN') {
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'SERVICE_ACCOUNT') {
       if (instance.locked) {
         return res.status(403).json({ error: 'Instance is locked' });
       }
@@ -730,7 +730,7 @@ router.post('/:id/reboot', authenticateToken, canAccessInstance, async (req, res
     const provider = await search('providers', 'id', workshop.provider_id);
 
     // Enforce lockouts for non-admins
-    if (req.user.role !== 'ADMIN') {
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'SERVICE_ACCOUNT') {
       if (instance.locked) {
         return res.status(403).json({ error: 'Instance is locked' });
       }
@@ -845,7 +845,7 @@ router.get('/:id/console', authenticateToken, canAccessInstance, async (req, res
     const provider = await search('providers', 'id', workshop.provider_id);
     
     // Enforce lockouts for non-admins
-    if (req.user.role !== 'ADMIN') {
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'SERVICE_ACCOUNT') {
       if (instance.locked) {
         return res.status(403).json({ error: 'Instance is locked' });
       }

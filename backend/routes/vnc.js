@@ -63,7 +63,7 @@ router.post('/:instanceId/console', authenticateToken, canAccessInstance, async 
     const workshop = await search('workshops', 'id', instance.workshop_id);
 
     // Check if instance or workshop is locked (non-admins). Workshop window defines allowed access.
-    if (req.user.role !== 'ADMIN') {
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'SERVICE_ACCOUNT') {
       if (instance.locked) {
         return res.status(403).json({ error: 'Instance is locked' });
       }
@@ -161,7 +161,7 @@ router.post('/:instanceId/console/refresh', authenticateToken, canAccessInstance
     const workshop = await search('workshops', 'id', instance.workshop_id);
 
     // Check if instance or workshop is locked (non-admins). Workshop window defines allowed access.
-    if (req.user.role !== 'ADMIN') {
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'SERVICE_ACCOUNT') {
       if (instance.locked) {
         return res.status(403).json({ error: 'Instance is locked' });
       }
@@ -293,7 +293,7 @@ router.delete('/sessions/:sessionId', authenticateToken, async (req, res) => {
     }
     
     // Check if user owns this session or is admin
-    if (session.user_id !== req.user.id && req.user.role !== 'ADMIN') {
+    if (session.user_id !== req.user.id && req.user.role !== 'ADMIN' && req.user.role !== 'SERVICE_ACCOUNT') {
       return res.status(403).json({ error: 'Access denied to session' });
     }
     

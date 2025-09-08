@@ -102,7 +102,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
     }
     
     // Check if user has access to this team
-    if (req.user.role !== 'ADMIN') {
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'SERVICE_ACCOUNT') {
       const userTeam = await searchAll('user_teams', ['user_id', 'team_id'], [req.user.id, id]);
       if (userTeam.length === 0) {
         return res.status(403).json({ error: 'Access denied to team' });
@@ -417,7 +417,7 @@ router.get('/:id/users', authenticateToken, async (req, res) => {
     }
     
     // Check if user has access to this team
-    if (req.user.role !== 'ADMIN') {
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'SERVICE_ACCOUNT') {
       const userTeam = await searchAll('user_teams', ['user_id', 'team_id'], [req.user.id, id]);
       if (userTeam.length === 0) {
         return res.status(403).json({ error: 'Access denied to team' });

@@ -755,7 +755,7 @@ router.get('/:id/teams', authenticateToken, async (req, res) => {
     }
     
     // Check if user can access this information
-    if (req.user.role !== 'ADMIN' && req.user.id !== id) {
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'SERVICE_ACCOUNT' && req.user.id !== id) {
       return res.status(403).json({ error: 'Access denied' });
     }
     
