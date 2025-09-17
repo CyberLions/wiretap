@@ -57,7 +57,10 @@ router.get('/', authenticateToken, async (req, res) => {
       if (teamIds.length === 0) {
         workshops = [];
       } else {
-        const teams = await searchAll('teams', ['id'], teamIds);
+        const teams = await executeQuery(
+          `SELECT * FROM teams WHERE id IN (${teamIds.map(() => '?').join(',')})`,
+          teamIds
+        );
         const workshopIds = [...new Set(teams.map(team => team.workshop_id))];
         
         if (workshopIds.length === 0) {
@@ -364,7 +367,10 @@ router.delete('/:id', authenticateToken, requireAdmin, async (req, res) => {
     // Find all users with @workshop.local emails in these teams
     let usersToDelete = [];
     if (teamIds.length > 0) {
-      const userTeams = await searchAll('user_teams', ['team_id'], [teamIds]);
+      const userTeams = await executeQuery(
+        `SELECT * FROM user_teams WHERE team_id IN (${teamIds.map(() => '?').join(',')})`,
+        teamIds
+      );
       const userIds = userTeams.map(ut => ut.user_id);
       if (userIds.length > 0) {
         // Only delete users with @workshop.local emails (generated users)

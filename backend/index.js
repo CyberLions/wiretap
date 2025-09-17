@@ -22,7 +22,7 @@ const { dbInitialization } = require('./utils/db');
     // 3. Set up scheduled tasks
     console.log("Setting up scheduled tasks...");
     
-    // Schedule instance status updates every 5 minutes
+    // Schedule instance status updates every 30 seconds
     const scheduleInstanceUpdates = () => {
       const { updateInstanceStatuses } = require('./managers/openstack');
 
@@ -44,7 +44,7 @@ const { dbInitialization } = require('./utils/db');
         } catch (error) {
           console.error('Error in scheduled instance updates:', error);
         }
-      }, 5 * 60 * 1000); // 5 minutes
+      }, 30 * 1000); // 30 seconds
     };
     
     // Schedule session cleanup every hour

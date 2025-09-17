@@ -68,7 +68,10 @@ async function getAllInstances(user, filters = {}) {
     // Get instances assigned to user or user's teams
     const userInstances = await searchAll('instances', ['user_id'], [user.id]);
     const teamInstances = teamIds.length > 0 ? 
-      await searchAll('instances', ['team_id'], teamIds) : [];
+      await executeQuery(
+        `SELECT * FROM instances WHERE team_id IN (${teamIds.map(() => '?').join(',')})`,
+        teamIds
+      ) : [];
     
     // Combine and deduplicate
     const allInstances = [...userInstances, ...teamInstances];

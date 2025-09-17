@@ -100,7 +100,7 @@ router.post('/sync', authenticateToken, requireAdmin, async (req, res) => {
  * /api/instances/sync-scheduled:
  *   post:
  *     summary: Trigger scheduled instance sync
- *     description: Manually triggers the scheduled instance status update task that runs every 2 minutes
+     *     description: Manually triggers the scheduled instance status update task that runs every 30 seconds
  *     tags: [Instances]
  *     security:
  *       - BearerAuth: []
