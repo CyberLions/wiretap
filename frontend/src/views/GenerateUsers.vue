@@ -89,11 +89,18 @@
           </div>
           <button 
             @click="generateUsers"
-            :disabled="!isGenerateFormValid"
+            :disabled="!isGenerateFormValid || generatingUsers"
             class="btn btn-primary w-full"
-            :class="{ 'opacity-50 cursor-not-allowed': !isGenerateFormValid }"
+            :class="{ 'opacity-50 cursor-not-allowed': !isGenerateFormValid || generatingUsers }"
           >
-            Generate Users
+            <div v-if="generatingUsers" class="flex items-center justify-center">
+              <svg class="animate-spin -ml-1 mr-3 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Generating Users...
+            </div>
+            <span v-else>Generate Users</span>
           </button>
           <div v-if="!isGenerateFormValid" class="text-sm text-red-400 mt-2">
             Please fill in all required fields and ensure password settings are valid.
@@ -136,6 +143,7 @@ export default {
   setup() {
     const competitions = ref([])
     const loading = ref(false)
+    const generatingUsers = ref(false)
     const error = ref(null)
     
     // Modal states
@@ -202,6 +210,7 @@ export default {
 
     const generateUsers = async () => {
       try {
+        generatingUsers.value = true
         const formData = { ...generateForm.value }
         
         // If using random passwords, don't send the password field
@@ -233,6 +242,8 @@ export default {
         console.error('Error generating users:', err)
         const errorMessage = err.response?.data?.error || 'Failed to generate users'
         showToast(errorMessage, 'error')
+      } finally {
+        generatingUsers.value = false
       }
     }
 
@@ -263,6 +274,7 @@ export default {
     return {
       competitions,
       loading,
+      generatingUsers,
       error,
       generateForm,
       isGenerateFormValid,

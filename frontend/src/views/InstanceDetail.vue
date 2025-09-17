@@ -31,14 +31,27 @@
             <p class="text-gray-400 mt-2">{{ instance.workshop_name }} - {{ instance.openstack_id }}</p>
           </div>
           <div class="flex items-center space-x-4">
-            <span 
-              :class="[
-                'status-badge px-3 py-1',
-                getStatusClass(instance.status)
-              ]"
-            >
-              {{ instance.status }}
-            </span>
+            <div class="flex items-center space-x-2">
+              <span 
+                :class="[
+                  'status-badge px-3 py-1',
+                  getStatusClass(instance.status)
+                ]"
+              >
+                {{ instance.status }}
+              </span>
+              <!-- Monitoring Indicator -->
+              <div
+                v-if="isMonitoring"
+                class="flex items-center space-x-1 text-yellow-400"
+              >
+                <svg class="w-3 h-3 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span class="text-xs">Monitoring...</span>
+              </div>
+            </div>
             <span 
               :class="[
                 'status-badge px-3 py-1',
@@ -130,33 +143,49 @@
                 v-if="canAccessInstance"
                 class="btn btn-success"
                 @click="powerAction('start')"
-                :disabled="instance.power_state === 'running'"
+                :disabled="instance.power_state === 'running' || isPowerActionInProgress || isInstanceTransitioning"
               >
-                Start
+                <svg v-if="isPowerActionInProgress && currentPowerAction === 'start'" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                {{ getPowerActionText('start') }}
               </button>
               <button 
                 v-if="canAccessInstance"
                 class="btn btn-secondary"
                 @click="powerAction('stop')"
-                :disabled="instance.power_state === 'shutoff'"
+                :disabled="instance.power_state === 'shutoff' || isPowerActionInProgress || isInstanceTransitioning"
               >
-                Stop
+                <svg v-if="isPowerActionInProgress && currentPowerAction === 'stop'" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                {{ getPowerActionText('stop') }}
               </button>
               <button 
                 v-if="canAccessInstance"
                 class="btn btn-secondary"
                 @click="powerAction('restart')"
-                :disabled="instance.power_state === 'shutoff'"
+                :disabled="instance.power_state === 'shutoff' || isPowerActionInProgress || isInstanceTransitioning"
               >
-                Restart
+                <svg v-if="isPowerActionInProgress && currentPowerAction === 'restart'" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                {{ getPowerActionText('restart') }}
               </button>
               <button 
                 v-if="canAccessInstance"
                 class="btn btn-danger"
                 @click="powerAction('hard_reboot')"
-                :disabled="instance.power_state === 'shutoff'"
+                :disabled="instance.power_state === 'shutoff' || isPowerActionInProgress || isInstanceTransitioning"
               >
-                Hard Reboot
+                <svg v-if="isPowerActionInProgress && currentPowerAction === 'hard_reboot'" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                {{ getPowerActionText('hard_reboot') }}
               </button>
             </div>
           </div>
@@ -208,6 +237,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useInstanceStatusMonitor } from '@/composables/useInstanceStatusMonitor'
 import api from '@/services/api'
 
 export default {
@@ -227,6 +257,93 @@ export default {
       team_id: '',
       user_id: ''
     })
+
+    // Power action state
+    const isPowering = ref(false)
+    const currentPowerAction = ref('')
+
+    // Instance status monitoring
+    const {
+      isMonitoring,
+      currentStatus,
+      currentPowerState,
+      startMonitoring,
+      stopMonitoring
+    } = useInstanceStatusMonitor(route.params.id, {
+      pollInterval: 2000,
+      maxPollAttempts: 30,
+      onStatusChange: (newStatus, newPowerState, instanceData) => {
+        // Update the instance data with new status
+        if (instance.value) {
+          instance.value.status = newStatus
+          instance.value.power_state = newPowerState
+        }
+        console.log(`Instance status updated: ${newStatus}, power state: ${newPowerState}`)
+        
+        // Refresh the instance data to get the latest information
+        fetchInstance()
+      },
+      onPollComplete: (finalStatus, finalPowerState) => {
+        console.log(`Status monitoring completed. Final status: ${finalStatus}`)
+        // Show completion toast if power action was successful
+        if (isPowering.value) {
+          // You could add a toast notification here if needed
+          console.log('Power action completed successfully')
+          isPowering.value = false
+          currentPowerAction.value = ''
+        }
+      }
+    })
+
+    // Computed property to show loading state during power actions
+    const isPowerActionInProgress = computed(() => {
+      return isPowering.value || isMonitoring.value
+    })
+
+    // Computed property to check if instance is in a transitioning state
+    const isInstanceTransitioning = computed(() => {
+      if (!instance.value) return false
+      
+      const status = instance.value.status?.toLowerCase()
+      const powerState = instance.value.power_state?.toLowerCase()
+      
+      // Check for transitioning states
+      const transitioningStatuses = ['starting', 'stopping', 'rebooting', 'building', 'pending', 'transitioning']
+      const transitioningPowerStates = ['starting', 'stopping', 'rebooting', 'transitioning', 'shutdown']
+      
+      const statusTransitioning = transitioningStatuses.includes(status)
+      const powerStateTransitioning = transitioningPowerStates.includes(powerState)
+      
+      // Also check for inconsistent states (status and power state don't match)
+      const inconsistentState = (
+        (status === 'shutoff' && powerState === 'running') ||
+        (status === 'running' && powerState === 'shutoff') ||
+        (status === 'active' && powerState === 'shutoff') ||
+        (status === 'stopped' && powerState === 'running')
+      )
+      
+      return statusTransitioning || powerStateTransitioning || inconsistentState
+    })
+
+    // Computed property for power action button text
+    const getPowerActionText = (action) => {
+      if (isPowerActionInProgress.value && currentPowerAction.value === action) {
+        switch (action) {
+          case 'start': return 'Starting...'
+          case 'stop': return 'Stopping...'
+          case 'restart': return 'Restarting...'
+          case 'hard_reboot': return 'Rebooting...'
+          default: return `${action}...`
+        }
+      }
+      switch (action) {
+        case 'start': return 'Start'
+        case 'stop': return 'Stop'
+        case 'restart': return 'Restart'
+        case 'hard_reboot': return 'Hard Reboot'
+        default: return action
+      }
+    }
 
     const isAdmin = computed(() => authStore.isAdmin)
     const canAccessInstance = computed(() => {
@@ -278,11 +395,37 @@ export default {
     }
 
     const powerAction = async (action) => {
+      isPowering.value = true
+      currentPowerAction.value = action
       try {
         await api.post(`/instances/${route.params.id}/power`, { action })
+        
+        // Start background monitoring for status changes
+        startMonitoring(instance.value.status, instance.value.power_state, action)
+        
+        // Also refresh instance status immediately
         await fetchInstance()
       } catch (err) {
         console.error('Error performing power action:', err)
+        
+        // Handle 409 Conflict (already in desired state)
+        if (err.response?.status === 409) {
+          let message = 'Instance is already in the desired state'
+          if (action === 'start') {
+            message = 'Instance is already powered on'
+          } else if (action === 'stop') {
+            message = 'Instance is already powered off'
+          } else if (action === 'restart' || action === 'hard_reboot') {
+            message = 'Instance cannot be rebooted in its current state'
+          }
+          // You could add a toast notification here if needed
+          console.log(message)
+        } else {
+          console.error(`Failed to ${action} instance: ${err.response?.data?.error || err.message}`)
+        }
+        
+        isPowering.value = false
+        currentPowerAction.value = ''
       }
     }
 
@@ -357,6 +500,12 @@ export default {
       assignment,
       isAdmin,
       canAccessInstance,
+      isPowerActionInProgress,
+      isInstanceTransitioning,
+      isMonitoring,
+      isPowering,
+      currentPowerAction,
+      getPowerActionText,
       openConsole,
       powerAction,
       updateAssignment,

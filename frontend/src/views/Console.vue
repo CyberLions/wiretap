@@ -8,10 +8,20 @@
           <div class="flex items-center space-x-6">
             <div class="flex items-center space-x-3">
               <!-- Status Indicator -->
-              <div
-                class="w-3 h-3 rounded-full"
-                :class="getStatusColor(instance?.status)"
-              ></div>
+              <div class="flex items-center space-x-2">
+                <div
+                  class="w-3 h-3 rounded-full"
+                  :class="getStatusColor(instance?.status)"
+                ></div>
+                <!-- Monitoring Indicator -->
+                <div
+                  v-if="isMonitoring"
+                  class="flex items-center space-x-1 text-yellow-400"
+                >
+                  <ArrowPathIcon class="w-3 h-3 animate-spin" />
+                  <span class="text-xs">Monitoring...</span>
+                </div>
+              </div>
               <h1 class="text-xl font-semibold text-white">
                 {{ instance?.name || 'Loading...' }}
               </h1>
@@ -68,35 +78,37 @@
             <!-- Shutdown Button -->
             <button
               @click="shutdownInstance"
-              :disabled="isPowering || isLocked"
+              :disabled="isPowerActionInProgress || isInstanceTransitioning || isLocked"
               class="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-colors duration-200"
             >
-              <PowerIcon class="w-4 h-4 mr-2" />
-              Shutdown
+              <PowerIcon v-if="!isPowerActionInProgress" class="w-4 h-4 mr-2" />
+              <ArrowPathIcon v-else class="w-4 h-4 mr-2 animate-spin" />
+              {{ getPowerActionText('shutdown') }}
             </button>
 
             <!-- Power On Button -->
             <button
               @click="powerOnInstance"
-              :disabled="isPowering || isLocked"
+              :disabled="isPowerActionInProgress || isInstanceTransitioning || isLocked"
               class="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-colors duration-200"
             >
-              <BoltIcon class="w-4 h-4 mr-2" />
-              Power On
+              <BoltIcon v-if="!isPowerActionInProgress" class="w-4 h-4 mr-2" />
+              <ArrowPathIcon v-else class="w-4 h-4 mr-2 animate-spin" />
+              {{ getPowerActionText('start') }}
             </button>
 
             <!-- Reboot Dropdown -->
             <div class="relative">
               <button
                 @click="toggleRebootMenu"
-                :disabled="isPowering || isLocked"
+                :disabled="isPowerActionInProgress || isInstanceTransitioning || isLocked"
                 data-reboot-button
                 class="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-yellow-600 rounded-md hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-colors duration-200"
               >
-                <ArrowPathIcon v-if="isPowering" class="w-4 h-4 mr-2 animate-spin" />
+                <ArrowPathIcon v-if="isPowerActionInProgress" class="w-4 h-4 mr-2 animate-spin" />
                 <ArrowPathIcon v-else class="w-4 h-4 mr-2" />
-                {{ isPowering ? 'Rebooting...' : 'Reboot' }}
-                <ChevronDownIcon v-if="!isPowering" class="w-4 h-4 ml-2" />
+                {{ isPowerActionInProgress && (currentPowerAction.value === 'soft reboot' || currentPowerAction.value === 'hard reboot') ? getPowerActionText(currentPowerAction.value) : 'Reboot' }}
+                <ChevronDownIcon v-if="!isPowerActionInProgress" class="w-4 h-4 ml-2" />
               </button>
 
               <!-- Reboot Menu -->
@@ -290,6 +302,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
+import { useInstanceStatusMonitor } from '@/composables/useInstanceStatusMonitor'
 import api from '@/services/api'
 import Toast from '@/components/Toast.vue'
 import { 
@@ -325,8 +338,10 @@ export default {
     const error = ref(null)
     const instance = ref(null)
     const isBrowserFullscreen = ref(false)
+    const isFullscreen = ref(false)
     const isRefreshing = ref(false)
     const isPowering = ref(false)
+    const currentPowerAction = ref('')
     const isRebootMenuOpen = ref(false)
     const consoleContainer = ref(null)
     const consoleUrl = ref('')
@@ -336,6 +351,38 @@ export default {
       show: false,
       message: '',
       type: 'success'
+    })
+
+    // Instance status monitoring
+    const {
+      isMonitoring,
+      currentStatus,
+      currentPowerState,
+      startMonitoring,
+      stopMonitoring
+    } = useInstanceStatusMonitor(route.params.id, {
+      pollInterval: 2000,
+      maxPollAttempts: 30,
+      onStatusChange: (newStatus, newPowerState, instanceData) => {
+        // Update the instance data with new status
+        if (instance.value) {
+          instance.value.status = newStatus
+          instance.value.power_state = newPowerState
+        }
+        console.log(`Instance status updated: ${newStatus}, power state: ${newPowerState}`)
+        
+        // Refresh the instance data to get the latest information
+        loadInstance()
+      },
+      onPollComplete: (finalStatus, finalPowerState) => {
+        console.log(`Status monitoring completed. Final status: ${finalStatus}`)
+        // Show completion toast if power action was successful
+        if (isPowering.value) {
+          showToast('Power action completed successfully', 'success')
+          isPowering.value = false
+          currentPowerAction.value = ''
+        }
+      }
     })
 
     // Ensure console URL is always HTTPS to prevent mixed content errors
@@ -364,6 +411,56 @@ export default {
     const isFullscreenRoute = computed(() => {
       return route.meta?.hideHeader || false
     })
+
+    // Computed property to show loading state during power actions
+    const isPowerActionInProgress = computed(() => {
+      return isPowering.value || isMonitoring.value
+    })
+
+    // Computed property to check if instance is in a transitioning state
+    const isInstanceTransitioning = computed(() => {
+      if (!instance.value) return false
+      
+      const status = instance.value.status?.toLowerCase()
+      const powerState = instance.value.power_state?.toLowerCase()
+      
+      // Check for transitioning states
+      const transitioningStatuses = ['starting', 'stopping', 'rebooting', 'building', 'pending', 'transitioning']
+      const transitioningPowerStates = ['starting', 'stopping', 'rebooting', 'transitioning', 'shutdown']
+      
+      const statusTransitioning = transitioningStatuses.includes(status)
+      const powerStateTransitioning = transitioningPowerStates.includes(powerState)
+      
+      // Also check for inconsistent states (status and power state don't match)
+      const inconsistentState = (
+        (status === 'shutoff' && powerState === 'running') ||
+        (status === 'running' && powerState === 'shutoff') ||
+        (status === 'active' && powerState === 'shutoff') ||
+        (status === 'stopped' && powerState === 'running')
+      )
+      
+      return statusTransitioning || powerStateTransitioning || inconsistentState
+    })
+
+    // Computed property for power action button text
+    const getPowerActionText = (action) => {
+      if (isPowerActionInProgress.value && currentPowerAction.value === action) {
+        switch (action) {
+          case 'shutdown': return 'Shutting down...'
+          case 'start': return 'Starting up...'
+          case 'soft reboot': return 'Soft rebooting...'
+          case 'hard reboot': return 'Hard rebooting...'
+          default: return `${action}...`
+        }
+      }
+      switch (action) {
+        case 'shutdown': return 'Shutdown'
+        case 'start': return 'Power On'
+        case 'soft reboot': return 'Soft Reboot'
+        case 'hard reboot': return 'Hard Reboot'
+        default: return action
+      }
+    }
 
     const getStatusColor = (status) => {
       switch (status?.toLowerCase()) {
@@ -521,29 +618,55 @@ export default {
 
     const shutdownInstance = async () => {
       isPowering.value = true
+      currentPowerAction.value = 'shutdown'
       try {
         await api.instances.powerOff(instance.value.id)
         showToast('Instance shutdown initiated successfully', 'success')
-        await loadInstance() // Refresh instance status
+        
+        // Start background monitoring for status changes
+        startMonitoring(instance.value.status, instance.value.power_state, 'shutdown')
+        
+        // Also refresh instance status immediately
+        await loadInstance()
       } catch (err) {
         console.error('Error shutting down instance:', err)
-        showToast(`Failed to shutdown instance: ${err.response?.data?.error || err.message}`, 'error')
-      } finally {
+        
+        // Handle 409 Conflict (already in desired state)
+        if (err.response?.status === 409) {
+          showToast('Instance is already powered off', 'info')
+        } else {
+          showToast(`Failed to shutdown instance: ${err.response?.data?.error || err.message}`, 'error')
+        }
+        
         isPowering.value = false
+        currentPowerAction.value = ''
       }
     }
 
     const powerOnInstance = async () => {
       isPowering.value = true
+      currentPowerAction.value = 'start'
       try {
         await api.instances.powerOn(instance.value.id)
         showToast('Instance power on initiated successfully', 'success')
-        await loadInstance() // Refresh instance status
+        
+        // Start background monitoring for status changes
+        startMonitoring(instance.value.status, instance.value.power_state, 'start')
+        
+        // Also refresh instance status immediately
+        await loadInstance()
       } catch (err) {
         console.error('Error powering on instance:', err)
-        showToast(`Failed to power on instance: ${err.response?.data?.error || err.message}`, 'error')
-      } finally {
+        
+        // Handle 409 Conflict (already in desired state)
+        if (err.response?.status === 409) {
+          showToast('Instance is already powered on', 'info')
+        } else {
+          showToast(`Failed to power on instance: ${err.response?.data?.error || err.message}`, 'error')
+        }
+        
         isPowering.value = false
+        currentPowerAction.value = ''
       }
     }
 
@@ -569,6 +692,7 @@ export default {
     const rebootInstance = async (type) => {
       console.log(`Attempting ${type} reboot for instance:`, instance.value?.id)
       isPowering.value = true
+      currentPowerAction.value = `${type} reboot`
       isRebootMenuOpen.value = false
       
       try {
@@ -577,7 +701,12 @@ export default {
         console.log('Reboot API response:', response)
         // Show success message
         showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} reboot initiated successfully`, 'success')
-        await loadInstance() // Refresh instance status
+        
+        // Start background monitoring for status changes
+        startMonitoring(instance.value.status, instance.value.power_state, `${type} reboot`)
+        
+        // Also refresh instance status immediately
+        await loadInstance()
       } catch (err) {
         console.error('Error rebooting instance:', err)
         console.error('Error details:', {
@@ -586,9 +715,14 @@ export default {
           status: err.response?.status
         })
         // Show error message to user
-        showToast(`Failed to ${type} reboot instance: ${err.response?.data?.error || err.message}`, 'error')
-      } finally {
+        if (err.response?.status === 409) {
+          showToast(`Instance cannot be rebooted in its current state`, 'info')
+        } else {
+          showToast(`Failed to ${type} reboot instance: ${err.response?.data?.error || err.message}`, 'error')
+        }
+        
         isPowering.value = false
+        currentPowerAction.value = ''
       }
     }
 
@@ -621,8 +755,10 @@ export default {
       error,
       instance,
       isBrowserFullscreen,
+      isFullscreen,
       isRefreshing,
       isPowering,
+      currentPowerAction,
       isRebootMenuOpen,
       consoleContainer,
       consoleUrl,
@@ -630,6 +766,10 @@ export default {
       isLocked,
       canShowConsole,
       isFullscreenRoute,
+      isPowerActionInProgress,
+      isInstanceTransitioning,
+      isMonitoring,
+      getPowerActionText,
       getStatusColor,
       getStatusMessage,
       parseIpAddresses,
@@ -645,8 +785,7 @@ export default {
       rebootInstance,
       toast,
       showToast,
-      closeToast
-      ,
+      closeToast,
       matrixColumns
     }
   }

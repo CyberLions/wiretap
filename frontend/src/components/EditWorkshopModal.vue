@@ -1,5 +1,6 @@
 <template>
-  <div v-if="show" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+  <Teleport to="body">
+    <div v-if="show" class="modal-backdrop">
     <div class="bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
       <div class="px-6 py-4 border-b border-gray-700">
         <h3 class="text-lg font-medium text-white">Edit Workshop</h3>
@@ -51,13 +52,23 @@
           <label class="block text-sm font-medium text-gray-300 mb-2">
             OpenStack Project Name *
           </label>
-          <input
+          <select
             v-model="form.openstack_project_name"
-            type="text"
             required
-            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="Enter OpenStack project name"
-          />
+            :disabled="!form.provider_id || loadingProjects"
+            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <option value="">Select a project</option>
+            <option v-for="project in projects" :key="project.id" :value="project.name">
+              {{ project.name }}
+            </option>
+          </select>
+          <div v-if="loadingProjects" class="mt-1 text-sm text-gray-400">
+            Loading projects...
+          </div>
+          <div v-if="projectError" class="mt-1 text-sm text-red-400">
+            {{ projectError }}
+          </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -110,7 +121,8 @@
         </div>
       </form>
     </div>
-  </div>
+    </div>
+  </Teleport>
 </template>
 
 <script>
@@ -132,7 +144,10 @@ export default {
   emits: ['close', 'updated', 'error'],
   setup(props, { emit }) {
     const loading = ref(false)
+    const loadingProjects = ref(false)
     const providers = ref([])
+    const projects = ref([])
+    const projectError = ref('')
     const form = ref({
       name: '',
       description: '',
@@ -170,6 +185,32 @@ export default {
       }
     }
 
+    const fetchProjects = async (providerId) => {
+      if (!providerId) {
+        projects.value = []
+        return
+      }
+
+      loadingProjects.value = true
+      projectError.value = ''
+
+      try {
+        const response = await api.providers.getProjects(providerId)
+        if (response.data.success) {
+          projects.value = response.data.projects || []
+        } else {
+          projectError.value = response.data.error || 'Failed to fetch projects'
+          projects.value = []
+        }
+      } catch (error) {
+        console.error('Error fetching projects:', error)
+        projectError.value = error.response?.data?.error || 'Failed to fetch projects'
+        projects.value = []
+      } finally {
+        loadingProjects.value = false
+      }
+    }
+
     const resetForm = () => {
       form.value = {
         name: '',
@@ -179,6 +220,8 @@ export default {
         lockout_start: '',
         lockout_end: ''
       }
+      projects.value = []
+      projectError.value = ''
     }
 
     const populateForm = () => {
@@ -228,9 +271,22 @@ export default {
       }
     })
 
+    // Watch for provider changes to fetch projects
+    watch(() => form.value.provider_id, (newProviderId) => {
+      if (newProviderId) {
+        fetchProjects(newProviderId)
+      } else {
+        projects.value = []
+        form.value.openstack_project_name = ''
+      }
+    })
+
     return {
       loading,
+      loadingProjects,
       providers,
+      projects,
+      projectError,
       form,
       handleSubmit,
       toDateTimeLocal

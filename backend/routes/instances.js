@@ -617,6 +617,12 @@ router.post('/:id/power-on', authenticateToken, canAccessInstance, async (req, r
     res.json({ message: 'Instance powered on successfully' });
   } catch (error) {
     console.error('Error powering on instance:', error);
+    
+    // Handle specific error cases
+    if (error.message === 'Instance is already powered on') {
+      return res.status(409).json({ error: 'Instance is already powered on' });
+    }
+    
     res.status(500).json({ error: 'Failed to power on instance' });
   }
 });
@@ -679,6 +685,12 @@ router.post('/:id/power-off', authenticateToken, canAccessInstance, async (req, 
     res.json({ message: 'Instance powered off successfully' });
   } catch (error) {
     console.error('Error powering off instance:', error);
+    
+    // Handle specific error cases
+    if (error.message === 'Instance is already powered off') {
+      return res.status(409).json({ error: 'Instance is already powered off' });
+    }
+    
     res.status(500).json({ error: 'Failed to power off instance' });
   }
 });

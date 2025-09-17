@@ -1,5 +1,6 @@
 <template>
-  <div v-if="show" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+  <Teleport to="body">
+    <div v-if="show" class="modal-backdrop">
     <div class="bg-gray-800 rounded-lg shadow-xl border border-gray-700 w-full max-w-md mx-4">
       <div class="px-6 py-4 border-b border-gray-700">
         <h3 class="text-lg font-medium text-white">Add New Service Account</h3>
@@ -38,7 +39,8 @@
         </div>
       </form>
     </div>
-  </div>
+    </div>
+  </Teleport>
 </template>
 
 <script>

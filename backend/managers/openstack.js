@@ -407,6 +407,13 @@ async function powerOnInstance(provider, instance) {
     return true;
   } catch (error) {
     console.error('Error powering on instance:', error);
+    
+    // Handle specific error cases
+    if (error.message && error.message.includes('status code 409')) {
+      // 409 Conflict - instance is already in the desired state
+      throw new Error('Instance is already powered on');
+    }
+    
     throw new Error('Failed to power on instance');
   }
 }
@@ -426,6 +433,13 @@ async function powerOffInstance(provider, instance) {
     return true;
   } catch (error) {
     console.error('Error powering off instance:', error);
+    
+    // Handle specific error cases
+    if (error.message && error.message.includes('status code 409')) {
+      // 409 Conflict - instance is already in the desired state
+      throw new Error('Instance is already powered off');
+    }
+    
     throw new Error('Failed to power off instance');
   }
 }
@@ -449,6 +463,13 @@ async function restartInstance(provider, instance, hard = false) {
     return true;
   } catch (error) {
     console.error('Error restarting instance:', error);
+    
+    // Handle specific error cases
+    if (error.message && error.message.includes('status code 409')) {
+      // 409 Conflict - instance might be in a state where reboot is not allowed
+      throw new Error('Instance cannot be rebooted in its current state');
+    }
+    
     throw new Error('Failed to restart instance');
   }
 }

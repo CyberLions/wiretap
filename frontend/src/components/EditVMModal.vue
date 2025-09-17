@@ -1,5 +1,6 @@
 <template>
-  <div v-if="show" class="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 pt-8">
+  <Teleport to="body">
+    <div v-if="show" class="modal-backdrop">
     <div class="bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[calc(100vh-4rem)] overflow-y-auto">
       <div class="px-6 py-4 border-b border-gray-700">
         <h3 class="text-lg font-medium text-white">Edit VM Instance</h3>
@@ -98,7 +99,8 @@
         </div>
       </form>
     </div>
-  </div>
+    </div>
+  </Teleport>
 </template>
 
 <script>

@@ -232,12 +232,43 @@ export default {
           if (!existingTeam) {
             allTeams.push({
               id: instance.team_id,
-              name: instance.team_name
+              name: instance.team_name,
+              workshop_id: instance.workshop_id // Include workshop_id for filtering
             })
           }
         }
       })
-      return allTeams.sort((a, b) => a.name.localeCompare(b.name))
+      
+      // Filter teams by selected competition if one is selected
+      let filteredTeams = allTeams
+      if (selectedCompetition.value) {
+        filteredTeams = allTeams.filter(team => team.workshop_id === selectedCompetition.value)
+      }
+      
+      return filteredTeams.sort((a, b) => a.name.localeCompare(b.name))
+    })
+
+    // Watchers for dropdown awareness
+    watch(selectedTeam, (newTeamId) => {
+      if (newTeamId) {
+        // Find the team and set the competition automatically
+        const team = availableTeams.value.find(t => t.id === newTeamId)
+        if (team && team.workshop_id) {
+          selectedCompetition.value = team.workshop_id
+        }
+      }
+    })
+
+    watch(selectedCompetition, (newCompetitionId) => {
+      if (newCompetitionId) {
+        // Clear team selection if the current team is not in the selected competition
+        if (selectedTeam.value) {
+          const currentTeam = availableTeams.value.find(t => t.id === selectedTeam.value)
+          if (!currentTeam || currentTeam.workshop_id !== newCompetitionId) {
+            selectedTeam.value = ''
+          }
+        }
+      }
     })
 
     const FILTERS_STORAGE_KEY = 'dashboard_filters_v1'

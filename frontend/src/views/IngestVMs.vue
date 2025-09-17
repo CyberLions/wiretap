@@ -49,8 +49,14 @@
               :disabled="fetchingVMs"
               class="btn btn-secondary"
             >
-              <span v-if="fetchingVMs" class="spinner w-4 h-4 mr-2"></span>
-              {{ fetchingVMs ? 'Fetching VMs...' : 'Fetch VMs from Provider' }}
+              <div v-if="fetchingVMs" class="flex items-center justify-center">
+                <svg class="animate-spin -ml-1 mr-3 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Fetching VMs...
+              </div>
+              <span v-else>Fetch VMs from Provider</span>
             </button>
           </div>
 
@@ -103,10 +109,10 @@
               <div class="flex space-x-2">
                 <button 
                   @click="assignAllVMs"
-                  :disabled="!hasUnassignedVMs"
-                  class="btn btn-primary text-sm"
+                  :disabled="!hasVMsWithTeams"
+                  class="btn btn-primary text-sm whitespace-nowrap"
                 >
-                  Assign All to Selected Team
+                  Assign All VMs
                 </button>
                 <select v-model="bulkAssignTeamId" class="form-input text-sm">
                   <option value="">Select team for bulk assignment</option>
@@ -129,6 +135,20 @@
       </div>
     </div>
 
+    <!-- Assignment Progress Modal -->
+    <AssignmentProgressModal
+      :show="showProgressModal"
+      :is-loading="assignmentLoading"
+      :completed="assignmentProgress.completed"
+      :total="assignmentProgress.total"
+      :current-status="assignmentProgress.currentStatus"
+      :current-team="assignmentProgress.currentTeam"
+      :success-message="assignmentProgress.successMessage"
+      :error-message="assignmentProgress.errorMessage"
+      @close="closeProgressModal"
+      @cancel="cancelAssignment"
+    />
+
     <!-- Toast Notification -->
     <Toast
       :show="toast.show"
@@ -140,14 +160,16 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import api from '@/services/api'
 import Toast from '@/components/Toast.vue'
+import AssignmentProgressModal from '@/components/AssignmentProgressModal.vue'
 
 export default {
   name: 'IngestVMs',
   components: {
-    Toast
+    Toast,
+    AssignmentProgressModal
   },
   setup() {
     const competitions = ref([])
@@ -159,6 +181,19 @@ export default {
     const fetchingVMs = ref(false)
     const fetchedVMs = ref([])
     const bulkAssignTeamId = ref('')
+    
+    // Assignment Progress State
+    const showProgressModal = ref(false)
+    const assignmentLoading = ref(false)
+    const assignmentCancelled = ref(false)
+    const assignmentProgress = ref({
+      completed: 0,
+      total: 0,
+      currentStatus: '',
+      currentTeam: '',
+      successMessage: '',
+      errorMessage: ''
+    })
     
     // Forms
     const ingestForm = ref({
@@ -204,9 +239,9 @@ export default {
       return fetchedVMs.value.filter(vm => vm.assignedTeamId).length
     })
 
-    // Computed property for unassigned VMs
-    const hasUnassignedVMs = computed(() => {
-      return fetchedVMs.value.some(vm => !vm.assignedTeamId)
+    // Computed property for VMs with teams assigned
+    const hasVMsWithTeams = computed(() => {
+      return fetchedVMs.value.some(vm => vm.assignedTeamId)
     })
 
     // Computed property for current competition
@@ -264,6 +299,16 @@ export default {
         ingestForm.value.competitionId = ''
       }
     }
+
+    // Watch for bulk team selection to update all VM dropdowns
+    watch(bulkAssignTeamId, (newTeamId) => {
+      if (newTeamId && fetchedVMs.value.length > 0) {
+        // Update all VM dropdowns to the selected team
+        fetchedVMs.value.forEach(vm => {
+          vm.assignedTeamId = newTeamId
+        })
+      }
+    })
 
     const fetchVMs = async () => {
       let competitionId = ingestForm.value.competitionId
@@ -358,15 +403,25 @@ export default {
     }
 
     const assignAllVMs = async () => {
-      if (!bulkAssignTeamId.value) {
-        showToast('Please select a team for bulk assignment', 'error')
+      // Get VMs that have teams assigned in their dropdowns
+      const vmsWithTeams = fetchedVMs.value.filter(vm => vm.assignedTeamId)
+      
+      if (vmsWithTeams.length === 0) {
+        showToast('Please select teams for VMs using the dropdowns', 'error')
         return
       }
 
-      const unassignedVMs = fetchedVMs.value.filter(vm => !vm.assignedTeamId)
-      if (unassignedVMs.length === 0) {
-        showToast('No unassigned VMs to assign', 'info')
-        return
+      // Initialize progress modal
+      assignmentCancelled.value = false
+      assignmentLoading.value = true
+      showProgressModal.value = true
+      assignmentProgress.value = {
+        completed: 0,
+        total: vmsWithTeams.length,
+        currentStatus: 'Starting assignment...',
+        currentTeam: '',
+        successMessage: '',
+        errorMessage: ''
       }
 
       try {
@@ -381,31 +436,65 @@ export default {
         
         const competition = competitions.value.find(c => c.id === competitionId)
         if (!competition) {
-          showToast('Competition not found', 'error')
+          assignmentProgress.value.errorMessage = 'Competition not found'
+          assignmentLoading.value = false
           return
         }
 
-        // Ingest all unassigned VMs and assign them to the selected team
-        const response = await api.providers.ingestVMs(competition.provider_id, {
-          team_id: bulkAssignTeamId.value,
-          instance_ids: unassignedVMs.map(vm => vm.id),
-          project_name: competition.openstack_project_name
+        // Group VMs by team for batch processing
+        const vmsByTeam = {}
+        vmsWithTeams.forEach(vm => {
+          if (!vmsByTeam[vm.assignedTeamId]) {
+            vmsByTeam[vm.assignedTeamId] = []
+          }
+          vmsByTeam[vm.assignedTeamId].push(vm)
         })
 
-        // Mark all VMs as assigned
-        unassignedVMs.forEach(vm => {
-          vm.assignedTeamId = bulkAssignTeamId.value
-          vm.isAssigned = true
-        })
+        // Process each team's VMs
+        let totalAssigned = 0
+        const teamEntries = Object.entries(vmsByTeam)
+        
+        for (let i = 0; i < teamEntries.length; i++) {
+          if (assignmentCancelled.value) {
+            assignmentProgress.value.currentStatus = 'Assignment cancelled'
+            assignmentLoading.value = false
+            return
+          }
 
-        showToast(`${unassignedVMs.length} VMs assigned to team successfully`, 'success')
+          const [teamId, teamVMs] = teamEntries[i]
+          const teamName = availableTeams.value.find(t => t.id === teamId)?.name || 'Unknown Team'
+          
+          assignmentProgress.value.currentStatus = `Assigning ${teamVMs.length} VMs to ${teamName}...`
+          assignmentProgress.value.currentTeam = teamName
+
+          const response = await api.providers.ingestVMs(competition.provider_id, {
+            team_id: teamId,
+            instance_ids: teamVMs.map(vm => vm.id),
+            project_name: competition.openstack_project_name
+          })
+
+          // Mark VMs as assigned
+          teamVMs.forEach(vm => {
+            vm.isAssigned = true
+          })
+          
+          totalAssigned += teamVMs.length
+          assignmentProgress.value.completed = totalAssigned
+        }
+
+        // Show success
+        assignmentProgress.value.currentStatus = 'Assignment completed successfully!'
+        assignmentProgress.value.successMessage = `${totalAssigned} VMs assigned successfully`
+        assignmentLoading.value = false
         
         // Refresh data to update the main VM list
         await fetchData()
       } catch (err) {
         console.error('Error bulk assigning VMs:', err)
-        const errorMessage = err.response?.data?.error || 'Failed to assign VMs to team'
-        showToast(errorMessage, 'error')
+        const errorMessage = err.response?.data?.error || 'Failed to assign VMs to teams'
+        assignmentProgress.value.errorMessage = errorMessage
+        assignmentProgress.value.currentStatus = 'Assignment failed'
+        assignmentLoading.value = false
       }
     }
 
@@ -424,6 +513,22 @@ export default {
       toast.value.show = false
     }
 
+    const closeProgressModal = () => {
+      showProgressModal.value = false
+      assignmentProgress.value = {
+        completed: 0,
+        total: 0,
+        currentStatus: '',
+        currentTeam: '',
+        successMessage: '',
+        errorMessage: ''
+      }
+    }
+
+    const cancelAssignment = () => {
+      assignmentCancelled.value = true
+    }
+
     onMounted(() => {
       fetchData()
     })
@@ -439,8 +544,11 @@ export default {
       bulkAssignTeamId,
       availableTeams,
       assignedVMsCount,
-      hasUnassignedVMs,
+      hasVMsWithTeams,
       currentCompetition,
+      showProgressModal,
+      assignmentLoading,
+      assignmentProgress,
       toast,
       getStatusColor,
       onCompetitionChange,
@@ -449,7 +557,9 @@ export default {
       assignVM,
       assignAllVMs,
       showToast,
-      closeToast
+      closeToast,
+      closeProgressModal,
+      cancelAssignment
     }
   }
 }
