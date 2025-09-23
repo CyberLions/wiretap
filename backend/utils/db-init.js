@@ -22,7 +22,7 @@ async function initializeTables(connection) {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 UNIQUE KEY unique_provider_name (name)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         `);
 
         // Create workshops table (OpenStack projects)
@@ -41,7 +41,7 @@ async function initializeTables(connection) {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 UNIQUE KEY unique_workshop_name (name),
                 FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE CASCADE
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         `);
 
         // Ensure lockout window columns exist for existing deployments (MySQL variant without IF NOT EXISTS)
@@ -82,7 +82,7 @@ async function initializeTables(connection) {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 UNIQUE KEY unique_team_workshop (workshop_id, team_number),
                 FOREIGN KEY (workshop_id) REFERENCES workshops(id) ON DELETE CASCADE
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         `);
 
         // Create users table
@@ -104,7 +104,7 @@ async function initializeTables(connection) {
                 UNIQUE KEY unique_username (username),
                 UNIQUE KEY unique_email (email),
                 UNIQUE KEY unique_openid_sub (openid_sub)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         `);
 
         // Create user_teams table (many-to-many relationship)
@@ -117,7 +117,7 @@ async function initializeTables(connection) {
                 UNIQUE KEY unique_user_team (user_id, team_id),
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
                 FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         `);
 
         // Create temp_user_team table for storing team assignments for non-existent users
@@ -129,7 +129,7 @@ async function initializeTables(connection) {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE KEY unique_email_team (email, team_id),
                 FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         `);
 
         // Create instances table (VMs)
@@ -153,7 +153,7 @@ async function initializeTables(connection) {
                 FOREIGN KEY (workshop_id) REFERENCES workshops(id) ON DELETE CASCADE,
                 FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         `);
 
         // Create sessions table for VNC connections
@@ -168,7 +168,7 @@ async function initializeTables(connection) {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
                 FOREIGN KEY (instance_id) REFERENCES instances(id) ON DELETE CASCADE
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         `);
 
 
@@ -184,7 +184,7 @@ async function initializeTables(connection) {
                 ip_address VARCHAR(45),
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         `);
 
         // Create service_accounts table
@@ -197,7 +197,7 @@ async function initializeTables(connection) {
                 last_used TIMESTAMP NULL,
                 enabled BOOLEAN DEFAULT true,
                 UNIQUE KEY unique_api_key (api_key)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         `);
 
         console.log('✓ Database tables created successfully');
