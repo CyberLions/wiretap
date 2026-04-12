@@ -1,0 +1,8 @@
+{
+  "name": "wiretap",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter './backend' --filter './frontend' --parallel run dev",
+    "install:all": "pnpm install --recursive"
+  }
+}
