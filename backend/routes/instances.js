@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticateToken, requireAdmin, canAccessInstance } = require('../middleware/auth');
-const { search } = require('../utils/db');
+const { search, executeQuery } = require('../utils/db');
 const {
   getAllInstances,
   getInstanceById,
@@ -279,6 +279,64 @@ router.put('/:id', authenticateToken, requireAdmin, async (req, res) => {
       return res.status(404).json({ error: error.message });
     }
     res.status(500).json({ error: 'Failed to update instance' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/instances/{id}/openstack-id:
+ *   patch:
+ *     summary: Update instance OpenStack ID
+ *     description: Replaces the openstack_id on an existing Wiretap instance record. Used by RVB-Store after a VM revert to re-link the same instance entry to the new Nova server UUID, so users see no interruption.
+ *     tags: [Instances]
+ *     security:
+ *       - BearerAuth: []
+ *       - ServiceAccountAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - openstack_id
+ *             properties:
+ *               openstack_id:
+ *                 type: string
+ *                 example: "new-nova-server-uuid"
+ *     responses:
+ *       200:
+ *         description: openstack_id updated successfully
+ *       400:
+ *         description: Missing openstack_id
+ *       404:
+ *         description: Instance not found
+ */
+router.patch('/:id/openstack-id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { openstack_id } = req.body;
+
+    if (!openstack_id) {
+      return res.status(400).json({ error: 'openstack_id is required' });
+    }
+
+    const instance = await search('instances', 'id', id);
+    if (!instance) {
+      return res.status(404).json({ error: 'Instance not found' });
+    }
+
+    await executeQuery('UPDATE instances SET openstack_id = ? WHERE id = ?', [openstack_id, id]);
+    res.json({ message: 'openstack_id updated successfully' });
+  } catch (error) {
+    console.error('Error updating instance openstack_id:', error);
+    res.status(500).json({ error: 'Failed to update openstack_id' });
   }
 });
 

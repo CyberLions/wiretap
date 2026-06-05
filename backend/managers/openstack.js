@@ -179,7 +179,8 @@ async function makeRequest(provider, endpoint, method = 'GET', data = null) {
         throw new Error(`Compute endpoint not found for region: ${region}`);
       }
 
-      const { url: targetUrl, headers: proxyHeaders } = buildProxiedRequest(`${computeEndpoint.url}${endpoint}`, provider);
+      const baseUrl = computeEndpoint.url.replace(/\/$/, '');
+      const { url: targetUrl, headers: proxyHeaders } = buildProxiedRequest(`${baseUrl}${endpoint}`, provider);
       const response = await axiosInstance({
         method,
         url: targetUrl,
@@ -705,7 +706,8 @@ async function makeRequestForProject(provider, projectName, endpoint, method = '
         throw new Error(`Compute endpoint not found for region: ${region}`);
       }
 
-      const { url: targetUrl, headers: proxyHeaders } = buildProxiedRequest(`${computeEndpoint.url}${endpoint}`, provider);
+      const baseUrl = computeEndpoint.url.replace(/\/$/, '');
+      const { url: targetUrl, headers: proxyHeaders } = buildProxiedRequest(`${baseUrl}${endpoint}`, provider);
       const response = await axiosInstance({
         method,
         url: targetUrl,
