@@ -3,6 +3,7 @@ const http = require('http');
 const https = require('https');
 const { openstackConfig } = require('../utils/config');
 const { update } = require('../utils/db');
+const { mapConsoleType, normalizeConsoleUrl } = require('../utils/console');
 
 // OpenStack authentication cache
 const authCache = new Map();
@@ -476,50 +477,11 @@ async function restartInstance(provider, instance, hard = false) {
 }
 
 /**
- * Force HTTPS for console URLs to prevent mixed content errors
- */
-function forceHttpsForConsoleUrl(url, consoleType) {
-  if (!url) return url;
-  
-  // Force HTTPS for VNC/NoVNC URLs to prevent mixed content errors
-  if ((consoleType.toUpperCase() === 'VNC' || consoleType.toUpperCase() === 'NOVNC') && url.startsWith('http://')) {
-    url = url.replace('http://', 'https://');
-  }
-  
-  return url;
-}
-
-/**
  * Get console URL for instance
  */
 async function getConsoleUrl(provider, instance, consoleType = 'NOVNC') {
   try {
-    // Map console types to OpenStack remote console types
-    let protocol, type;
-    switch (consoleType.toUpperCase()) {
-      case 'SERIAL':
-        protocol = 'serial';
-        type = 'serial';
-        break;
-      case 'SPICE':
-        protocol = 'spice';
-        type = 'spice-html5';
-        break;
-      case 'RDP':
-        protocol = 'rdp';
-        type = 'rdp-html5';
-        break;
-      case 'MKS':
-        protocol = 'mks';
-        type = 'webmks';
-        break;
-      case 'NOVNC':
-      case 'VNC':
-      default:
-        protocol = 'vnc';
-        type = 'novnc';
-        break;
-    }
+    const { protocol, type } = mapConsoleType(consoleType);
 
     const response = await makeRequest(provider, `/servers/${instance.openstack_id}/remote-consoles`, 'POST', {
       remote_console: {
@@ -530,13 +492,8 @@ async function getConsoleUrl(provider, instance, consoleType = 'NOVNC') {
     
     let consoleUrl = response.remote_console?.url;
     
-    // Force HTTPS for VNC URLs to prevent mixed content errors
-    consoleUrl = forceHttpsForConsoleUrl(consoleUrl, consoleType);
-    
-    // Add auto-scaling to NoVNC URLs
-    if ((consoleType.toUpperCase() === 'VNC' || consoleType.toUpperCase() === 'NOVNC') && consoleUrl && !consoleUrl.includes('scale=true')) {
-      consoleUrl += '&scale=true';
-    }
+    // https:// for the iframe types, wss:// for serial, plus noVNC scaling.
+    consoleUrl = normalizeConsoleUrl(consoleUrl, consoleType);
     
     return consoleUrl;
   } catch (error) {
@@ -550,32 +507,7 @@ async function getConsoleUrl(provider, instance, consoleType = 'NOVNC') {
  */
 async function getConsoleUrlForProject(provider, projectName, instance, consoleType = 'NOVNC') {
   try {
-    // Map console types to OpenStack remote console types 
-    let protocol, type;
-    switch (consoleType.toUpperCase()) {
-      case 'SERIAL':
-        protocol = 'serial';
-        type = 'serial';
-        break;
-      case 'SPICE':
-        protocol = 'spice';
-        type = 'spice-html5';
-        break;
-      case 'RDP':
-        protocol = 'rdp';
-        type = 'rdp-html5';
-        break;
-      case 'MKS':
-        protocol = 'mks';
-        type = 'webmks';
-        break;
-      case 'NOVNC':
-      case 'VNC':
-      default:
-        protocol = 'vnc';
-        type = 'novnc';
-        break;
-    }
+    const { protocol, type } = mapConsoleType(consoleType);
 
     const response = await makeRequestForProject(provider, projectName, `/servers/${instance.openstack_id}/remote-consoles`, 'POST', {
       remote_console: {
@@ -586,13 +518,8 @@ async function getConsoleUrlForProject(provider, projectName, instance, consoleT
     
     let consoleUrl = response.remote_console?.url;
     
-    // Force HTTPS for VNC URLs to prevent mixed content errors
-    consoleUrl = forceHttpsForConsoleUrl(consoleUrl, consoleType);
-    
-    // Add auto-scaling to NoVNC URLs
-    if ((consoleType.toUpperCase() === 'VNC' || consoleType.toUpperCase() === 'NOVNC') && consoleUrl && !consoleUrl.includes('scale=true')) {
-      consoleUrl += '&scale=true';
-    }
+    // https:// for the iframe types, wss:// for serial, plus noVNC scaling.
+    consoleUrl = normalizeConsoleUrl(consoleUrl, consoleType);
     
     return consoleUrl;
   } catch (error) {

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticateToken, requireAdmin, canAccessInstance } = require('../middleware/auth');
 const { search, executeQuery } = require('../utils/db');
+const { isSupportedConsoleType, normalizeConsoleType } = require('../utils/console');
 const {
   getAllInstances,
   getInstanceById,
@@ -904,6 +905,12 @@ router.get('/:id/console', authenticateToken, canAccessInstance, async (req, res
   try {
     const { id } = req.params;
     const { type = 'novnc' } = req.query;
+
+    if (!isSupportedConsoleType(type)) {
+      return res.status(400).json({ error: `Unsupported console type: ${type}` });
+    }
+    const consoleType = normalizeConsoleType(type);
+
     const instance = await search('instances', 'id', id);
     
     if (!instance) {
@@ -931,9 +938,18 @@ router.get('/:id/console', authenticateToken, canAccessInstance, async (req, res
     
     // Get console URL from OpenStack using project-specific authentication
     const { getConsoleUrlForProject } = require('../managers/openstack');
-    const consoleUrl = await getConsoleUrlForProject(provider, workshop.openstack_project_name, instance, type);
-    
-    res.json({ console_url: consoleUrl });
+    const consoleUrl = await getConsoleUrlForProject(provider, workshop.openstack_project_name, instance, consoleType);
+
+    if (!consoleUrl) {
+      // Most often this is a cloud with [serial_console] disabled, or an
+      // instance that predates it and so has no serial device attached.
+      return res.status(502).json({
+        error: `Could not get a ${consoleType} console for this instance`,
+        console_type: consoleType
+      });
+    }
+
+    res.json({ console_url: consoleUrl, console_type: consoleType });
   } catch (error) {
     console.error('Error getting console access:', error);
     res.status(500).json({ error: 'Failed to get console access' });

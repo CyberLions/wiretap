@@ -65,6 +65,38 @@
               Fullscreen
             </button>
 
+            <!-- Console Type Picker -->
+            <div class="relative">
+              <button
+                @click="toggleConsoleMenu"
+                :disabled="isLocked"
+                data-console-type-button
+                class="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-gray-700 rounded-md hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-colors duration-200"
+              >
+                <CommandLineIcon class="w-4 h-4 mr-2" />
+                {{ consoleTypeLabel }}
+                <ChevronDownIcon class="w-4 h-4 ml-2" />
+              </button>
+
+              <div
+                v-if="isConsoleMenuOpen"
+                class="absolute right-0 mt-2 w-44 bg-gray-800 rounded-md shadow-lg border border-gray-700 z-50 console-type-menu"
+              >
+                <div class="py-1">
+                  <button
+                    v-for="option in consoleTypeOptions"
+                    :key="option.value"
+                    @click="selectConsoleType(option.value)"
+                    class="w-full text-left px-4 py-2 text-sm hover:bg-gray-700 flex items-center justify-between"
+                    :class="option.value === consoleType ? 'text-white bg-gray-700/60' : 'text-gray-300'"
+                  >
+                    <span>{{ option.label }}</span>
+                    <CheckIcon v-if="option.value === consoleType" class="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <!-- Refresh Console Button -->
             <button
               @click="refreshConsole"
@@ -186,9 +218,17 @@
           ref="consoleContainer"
           class="w-full h-full bg-black"
         >
-          <!-- VNC Console iframe -->
+          <!-- Serial console, rendered by xterm.js -->
+          <SerialConsole
+            v-if="secureConsoleUrl && isSerialConsole"
+            :key="secureConsoleUrl"
+            :url="secureConsoleUrl"
+            class="w-full h-full"
+          />
+
+          <!-- Graphical console: noVNC serves its own page, so it goes in an iframe -->
           <iframe
-            v-if="secureConsoleUrl"
+            v-else-if="secureConsoleUrl"
             :src="secureConsoleUrl"
             class="w-full h-full border-0"
             allowfullscreen
@@ -305,6 +345,14 @@ import { useAuth } from '@/composables/useAuth'
 import { useInstanceStatusMonitor } from '@/composables/useInstanceStatusMonitor'
 import api from '@/services/api'
 import Toast from '@/components/Toast.vue'
+import SerialConsole from '@/components/SerialConsole.vue'
+import {
+  CONSOLE_TYPES,
+  CONSOLE_TYPE_OPTIONS,
+  DEFAULT_CONSOLE_TYPE,
+  loadPreferredConsoleType,
+  savePreferredConsoleType
+} from '@/utils/consoleTypes'
 import { 
   ArrowLeftIcon, 
   ArrowsPointingOutIcon, 
@@ -312,6 +360,8 @@ import {
   LockClosedIcon, 
   ComputerDesktopIcon,
   ChevronDownIcon,
+  CheckIcon,
+  CommandLineIcon,
   PowerIcon,
   BoltIcon
 } from '@heroicons/vue/24/outline'
@@ -320,12 +370,15 @@ export default {
   name: 'Console',
   components: {
     Toast,
+    SerialConsole,
     ArrowLeftIcon,
     ArrowsPointingOutIcon,
     ArrowPathIcon,
     LockClosedIcon,
     ComputerDesktopIcon,
     ChevronDownIcon,
+    CheckIcon,
+    CommandLineIcon,
     PowerIcon,
     BoltIcon
   },
@@ -345,6 +398,9 @@ export default {
     const isRebootMenuOpen = ref(false)
     const consoleContainer = ref(null)
     const consoleUrl = ref('')
+    const consoleType = ref(loadPreferredConsoleType(route.params.id))
+    const isConsoleMenuOpen = ref(false)
+    const consoleTypeOptions = CONSOLE_TYPE_OPTIONS
 
     // Toast notifications
     const toast = ref({
@@ -385,16 +441,27 @@ export default {
       }
     })
 
-    // Ensure console URL is always HTTPS to prevent mixed content errors
+    // Ensure console URLs are always TLS to prevent mixed content errors.
+    // The backend already does this, but a stale cached URL could slip through
+    // and a plain ws:// socket is rejected outright by the browser.
     const secureConsoleUrl = computed(() => {
       if (!consoleUrl.value) return ''
-      
-      // Force HTTPS for VNC console URLs to prevent mixed content errors
+
       if (consoleUrl.value.startsWith('http://')) {
         return consoleUrl.value.replace('http://', 'https://')
       }
-      
+      if (consoleUrl.value.startsWith('ws://')) {
+        return consoleUrl.value.replace('ws://', 'wss://')
+      }
+
       return consoleUrl.value
+    })
+
+    const isSerialConsole = computed(() => consoleType.value === CONSOLE_TYPES.SERIAL)
+
+    const consoleTypeLabel = computed(() => {
+      const option = CONSOLE_TYPE_OPTIONS.find(o => o.value === consoleType.value)
+      return option ? option.label : DEFAULT_CONSOLE_TYPE
     })
 
     const isLocked = computed(() => {
@@ -556,14 +623,43 @@ export default {
 
     const loadConsole = async () => {
       if (!instance.value || isLocked.value) return
-      
+
       try {
-        const response = await api.instances.getConsole(instance.value.id, 'vnc')
+        const response = await api.instances.getConsole(instance.value.id, consoleType.value)
         consoleUrl.value = response.data.console_url
       } catch (err) {
         console.error('Error loading console:', err)
         consoleUrl.value = ''
+
+        // A 502 here usually means the cloud cannot give us this console type
+        // at all - most often serial on a VM with no serial device attached.
+        const message = err?.response?.data?.error
+        if (err?.response?.status === 502 && isSerialConsole.value) {
+          showToast(
+            message || 'Serial console is not available for this instance. Try noVNC.',
+            'error'
+          )
+        } else if (message) {
+          showToast(message, 'error')
+        }
       }
+    }
+
+    const toggleConsoleMenu = () => {
+      isConsoleMenuOpen.value = !isConsoleMenuOpen.value
+    }
+
+    const selectConsoleType = async (type) => {
+      isConsoleMenuOpen.value = false
+      if (type === consoleType.value) return
+
+      consoleType.value = type
+      savePreferredConsoleType(route.params.id, type)
+
+      // Drop the old URL so the previous console tears down before the new
+      // one mounts, rather than both briefly holding a session.
+      consoleUrl.value = ''
+      await loadConsole()
     }
 
 
@@ -726,13 +822,20 @@ export default {
       }
     }
 
-    // Close reboot menu when clicking outside
+    // Close the reboot / console-type menus when clicking outside
     const handleClickOutside = (event) => {
       const rebootMenu = document.querySelector('.reboot-menu')
       const rebootButton = event.target.closest('button[data-reboot-button]')
       
       if (rebootMenu && !rebootMenu.contains(event.target) && !rebootButton) {
         isRebootMenuOpen.value = false
+      }
+
+      const consoleMenu = document.querySelector('.console-type-menu')
+      const consoleButton = event.target.closest('button[data-console-type-button]')
+
+      if (consoleMenu && !consoleMenu.contains(event.target) && !consoleButton) {
+        isConsoleMenuOpen.value = false
       }
     }
 
@@ -763,6 +866,13 @@ export default {
       consoleContainer,
       consoleUrl,
       secureConsoleUrl,
+      consoleType,
+      consoleTypeOptions,
+      consoleTypeLabel,
+      isConsoleMenuOpen,
+      isSerialConsole,
+      toggleConsoleMenu,
+      selectConsoleType,
       isLocked,
       canShowConsole,
       isFullscreenRoute,

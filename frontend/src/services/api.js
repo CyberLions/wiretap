@@ -124,7 +124,7 @@ const instances = {
     console.log(`API: Rebooting instance ${id} with type ${type}`)
     return api.post(`/instances/${id}/reboot`, { type })
   },
-  getConsole: (id, type = 'vnc') => api.get(`/instances/${id}/console?type=${type}`),
+  getConsole: (id, type = 'NOVNC') => api.get(`/instances/${id}/console?type=${encodeURIComponent(type)}`),
   getStatus: (id) => api.get(`/instances/${id}/status`),
   bulkAssign: (data) => api.post('/instances/bulk-assign', data)
 }
