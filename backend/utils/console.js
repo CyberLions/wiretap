@@ -27,9 +27,6 @@ const CONSOLE_TYPE_MAP = {
 
 const DEFAULT_CONSOLE_TYPE = 'NOVNC';
 
-// Types that hand back a ws:// stream we render ourselves rather than a page.
-const TEXT_CONSOLE_TYPES = ['SERIAL'];
-
 // Types whose URL is a noVNC page, and therefore accept noVNC's query params.
 const NOVNC_CONSOLE_TYPES = ['NOVNC', 'VNC'];
 
@@ -61,29 +58,24 @@ function mapConsoleType(consoleType) {
   return CONSOLE_TYPE_MAP[normalizeConsoleType(consoleType)];
 }
 
-/** True for console types that stream bytes instead of serving a page. */
-function isTextConsole(consoleType) {
-  return TEXT_CONSOLE_TYPES.includes(normalizeConsoleType(consoleType));
-}
-
 /** True for console types whose URL is a noVNC page. */
 function isNovncConsole(consoleType) {
   return NOVNC_CONSOLE_TYPES.includes(normalizeConsoleType(consoleType));
 }
 
 /**
- * Upgrade a console URL to its TLS scheme.
+ * Upgrade an http:// console URL to https://, so an iframe served from an
+ * HTTPS page is not blocked as mixed content.
  *
- * Wiretap is served over HTTPS, so a plain http:// iframe is blocked as mixed
- * content and a plain ws:// socket is blocked outright by the browser. Nova
- * hands back whichever scheme its proxy was configured with, so we normalize
- * here rather than requiring every deployment to get base_url exactly right.
+ * Deliberately leaves ws:// alone. Whether a ws:// serial URL has to become
+ * wss:// depends on how the page was served, which only the browser knows -
+ * see secureConsoleUrl in Console.vue. Rewriting it here would make a
+ * plain-ws deployment (serialproxy without TLS) unreachable with no way out.
  */
 function forceSecureScheme(url) {
   if (!url) return url;
 
   if (url.startsWith('http://')) return 'https://' + url.slice('http://'.length);
-  if (url.startsWith('ws://')) return 'wss://' + url.slice('ws://'.length);
 
   return url;
 }
@@ -110,7 +102,6 @@ module.exports = {
   normalizeConsoleType,
   isSupportedConsoleType,
   mapConsoleType,
-  isTextConsole,
   isNovncConsole,
   forceSecureScheme,
   normalizeConsoleUrl

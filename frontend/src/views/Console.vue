@@ -69,7 +69,7 @@
             <div class="relative">
               <button
                 @click="toggleConsoleMenu"
-                :disabled="isLocked"
+                :disabled="isLocked || !canShowConsole"
                 data-console-type-button
                 class="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-gray-700 rounded-md hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-colors duration-200"
               >
@@ -450,7 +450,14 @@ export default {
       if (consoleUrl.value.startsWith('http://')) {
         return consoleUrl.value.replace('http://', 'https://')
       }
-      if (consoleUrl.value.startsWith('ws://')) {
+      // Only when the page itself is HTTPS: on an HTTP page (local dev) a
+      // plain ws:// socket is fine, and forcing wss:// there would point at a
+      // TLS listener the serial proxy may not have.
+      if (
+        consoleUrl.value.startsWith('ws://') &&
+        typeof window !== 'undefined' &&
+        window.location?.protocol === 'https:'
+      ) {
         return consoleUrl.value.replace('ws://', 'wss://')
       }
 
@@ -460,8 +467,10 @@ export default {
     const isSerialConsole = computed(() => consoleType.value === CONSOLE_TYPES.SERIAL)
 
     const consoleTypeLabel = computed(() => {
-      const option = CONSOLE_TYPE_OPTIONS.find(o => o.value === consoleType.value)
-      return option ? option.label : DEFAULT_CONSOLE_TYPE
+      const option =
+        CONSOLE_TYPE_OPTIONS.find(o => o.value === consoleType.value) ||
+        CONSOLE_TYPE_OPTIONS.find(o => o.value === DEFAULT_CONSOLE_TYPE)
+      return option.label
     })
 
     const isLocked = computed(() => {
@@ -623,6 +632,9 @@ export default {
 
     const loadConsole = async () => {
       if (!instance.value || isLocked.value) return
+      // A powered-off VM has no console; the pane already says so, and asking
+      // anyway would replace that with a misleading error toast.
+      if (!canShowConsole.value) return
 
       try {
         const response = await api.instances.getConsole(instance.value.id, consoleType.value)

@@ -91,9 +91,25 @@ async function chooseType(wrapper, label) {
   await flushPromises()
 }
 
+/** Pretend the page was served over `protocol` for the duration of a test. */
+function setPageProtocol(protocol) {
+  Object.defineProperty(window, 'location', {
+    value: { ...window.location, protocol },
+    writable: true,
+    configurable: true
+  })
+}
+
+const httpsLocation = window.location
+
 beforeEach(() => {
   vi.clearAllMocks()
   window.localStorage.clear()
+  Object.defineProperty(window, 'location', {
+    value: httpsLocation,
+    writable: true,
+    configurable: true
+  })
 
   getById.mockResolvedValue({
     data: { id: 'inst-1', name: 'team-1-server', status: 'active', locked: false }
@@ -204,7 +220,7 @@ describe('Console - rendering the right console', () => {
     expect(wrapper.find('[data-test="serial-console"]').text()).toBe(SERIAL_URL)
   })
 
-  it('upgrades a ws:// URL to wss:// before handing it over', async () => {
+  it('upgrades a ws:// URL to wss:// on an HTTPS page', async () => {
     getConsole.mockResolvedValue({
       data: { console_url: 'ws://nova.example.org:6083/?token=a', console_type: 'SERIAL' }
     })
@@ -213,6 +229,33 @@ describe('Console - rendering the right console', () => {
     await chooseType(wrapper, 'xterm.js')
 
     expect(wrapper.find('[data-test="serial-console"]').text()).toBe(SERIAL_URL)
+  })
+
+  it('leaves ws:// alone on an HTTP page, so local dev still connects', async () => {
+    // A serialproxy with no TLS listener is a normal deployment; forcing
+    // wss:// there would make the console permanently unreachable.
+    setPageProtocol('http:')
+    getConsole.mockResolvedValue({
+      data: { console_url: 'ws://nova.example.org:6083/?token=a', console_type: 'SERIAL' }
+    })
+    const wrapper = await mountConsole()
+
+    await chooseType(wrapper, 'xterm.js')
+
+    expect(wrapper.find('[data-test="serial-console"]').text())
+      .toBe('ws://nova.example.org:6083/?token=a')
+  })
+
+  it('still upgrades an http:// noVNC URL regardless of page scheme', async () => {
+    getConsole.mockResolvedValue({
+      data: {
+        console_url: 'http://nova.example.org:6080/vnc_auto.html?token=a',
+        console_type: 'NOVNC'
+      }
+    })
+    const wrapper = await mountConsole()
+
+    expect(wrapper.find('iframe').attributes('src')).toMatch(/^https:/)
   })
 
   it('goes back to the iframe when noVNC is reselected', async () => {
@@ -287,5 +330,43 @@ describe('Console - when the console cannot be opened', () => {
     await chooseType(wrapper, 'xterm.js')
 
     expect(typeButton(wrapper).text()).toContain('xterm.js')
+  })
+})
+
+describe('Console - powered-off instances', () => {
+  beforeEach(() => {
+    getById.mockResolvedValue({
+      data: { id: 'inst-1', name: 'team-1-server', status: 'shutoff', locked: false }
+    })
+  })
+
+  it('does not request a console for a powered-off VM', async () => {
+    await mountConsole()
+
+    expect(getConsole).not.toHaveBeenCalled()
+  })
+
+  it('disables the picker rather than letting it produce a misleading error', async () => {
+    const wrapper = await mountConsole()
+
+    expect(typeButton(wrapper).attributes('disabled')).toBeDefined()
+  })
+})
+
+describe('Console - picker label', () => {
+  it('shows a human label, never the raw type key', async () => {
+    const wrapper = await mountConsole()
+
+    expect(typeButton(wrapper).text()).not.toContain('NOVNC')
+    expect(typeButton(wrapper).text()).toContain('noVNC')
+  })
+
+  it('falls back to a human label if the stored type has no option', async () => {
+    // e.g. a type added to CONSOLE_TYPES but not to CONSOLE_TYPE_OPTIONS.
+    window.localStorage.setItem('wiretap.consoleType.inst-1', 'NOVNC')
+
+    const wrapper = await mountConsole()
+
+    expect(typeButton(wrapper).text()).toContain('noVNC')
   })
 })

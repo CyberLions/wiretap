@@ -22,7 +22,7 @@
 </template>
 
 <script>
-import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 
@@ -50,7 +50,6 @@ export default {
     let resizeObserver = null
 
     const encoder = new TextEncoder()
-    const decoder = new TextDecoder()
 
     const statusMessage = computed(() => {
       switch (status.value) {
@@ -113,9 +112,9 @@ export default {
       socket.onopen = () => {
         setStatus('open')
         fit()
-        // Nudge the guest into redrawing its prompt, since we joined an
-        // already-running tty with no scrollback of our own.
-        send('\r')
+        // Nothing is sent on connect. A serial console attaches to a tty that
+        // is already running and may be shared, so even a bare carriage return
+        // would answer whatever prompt is sitting there.
       }
 
       socket.onmessage = (event) => {
@@ -126,16 +125,22 @@ export default {
         } else if (typeof event.data.arrayBuffer === 'function') {
           // Blob, if the socket ever hands one back.
           event.data.arrayBuffer().then((buffer) => {
-            if (term) term.write(decoder.decode(new Uint8Array(buffer)))
+            if (term) term.write(new Uint8Array(buffer))
           })
         } else {
           // ArrayBuffer or a typed-array view of one. Deliberately not an
           // `instanceof ArrayBuffer` check: frames can arrive carrying a
           // different realm's constructor.
-          const bytes = ArrayBuffer.isView(event.data)
-            ? new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength)
-            : new Uint8Array(event.data)
-          term.write(decoder.decode(bytes))
+          //
+          // The bytes go to xterm undecoded on purpose: the proxy splits the
+          // stream at arbitrary boundaries, and xterm's decoder carries state
+          // across writes, so a multi-byte character straddling two frames
+          // still lands intact.
+          term.write(
+            ArrayBuffer.isView(event.data)
+              ? new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength)
+              : new Uint8Array(event.data)
+          )
         }
       }
 
@@ -150,8 +155,11 @@ export default {
       socket.send(encoder.encode(data))
     }
 
-    onMounted(async () => {
-      await nextTick()
+    onMounted(() => {
+      // Deliberately not awaiting anything here: the template ref is already
+      // populated when onMounted fires, and an await would let the component
+      // unmount mid-setup, leaving a terminal and listeners behind.
+      if (!terminalEl.value) return
 
       term = new Terminal({
         fontSize: props.fontSize,

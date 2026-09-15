@@ -6,7 +6,6 @@ const {
   normalizeConsoleType,
   isSupportedConsoleType,
   mapConsoleType,
-  isTextConsole,
   isNovncConsole,
   forceSecureScheme,
   normalizeConsoleUrl
@@ -104,29 +103,25 @@ describe('mapConsoleType', () => {
   });
 });
 
-describe('isTextConsole / isNovncConsole', () => {
-  it('classifies serial as text, not noVNC', () => {
-    expect(isTextConsole('SERIAL')).toBe(true);
+describe('isNovncConsole', () => {
+  it('does not classify serial as noVNC', () => {
     expect(isNovncConsole('SERIAL')).toBe(false);
   });
 
-  it('classifies both VNC spellings as noVNC, not text', () => {
+  it('classifies both VNC spellings as noVNC', () => {
     for (const name of ['VNC', 'NOVNC', 'vnc', 'novnc']) {
       expect(isNovncConsole(name)).toBe(true);
-      expect(isTextConsole(name)).toBe(false);
     }
   });
 
-  it('does not treat spice/rdp/mks as either', () => {
+  it('does not treat spice/rdp/mks as noVNC', () => {
     for (const name of ['SPICE', 'RDP', 'MKS']) {
-      expect(isTextConsole(name)).toBe(false);
       expect(isNovncConsole(name)).toBe(false);
     }
   });
 
   it('treats unknown types as noVNC, since that is the fallback', () => {
     expect(isNovncConsole('whatever')).toBe(true);
-    expect(isTextConsole('whatever')).toBe(false);
   });
 });
 
@@ -136,9 +131,11 @@ describe('forceSecureScheme', () => {
       .toBe('https://host:6080/vnc.html?token=abc');
   });
 
-  it('upgrades ws to wss', () => {
+  it('leaves ws:// alone, because only the browser knows the page scheme', () => {
+    // A deployment whose serialproxy has no TLS listener still has to work;
+    // Console.vue upgrades this when the page itself is HTTPS.
     expect(forceSecureScheme('ws://host:6083/?token=abc'))
-      .toBe('wss://host:6083/?token=abc');
+      .toBe('ws://host:6083/?token=abc');
   });
 
   it('leaves already-secure URLs alone', () => {
@@ -147,7 +144,7 @@ describe('forceSecureScheme', () => {
   });
 
   it('is idempotent', () => {
-    const once = forceSecureScheme('ws://host:6083/?token=abc');
+    const once = forceSecureScheme('http://host:6080/vnc.html?token=abc');
     expect(forceSecureScheme(once)).toBe(once);
   });
 
@@ -170,10 +167,15 @@ describe('normalizeConsoleUrl', () => {
       .toBe('https://host:6080/vnc_auto.html?token=abc&scale=true');
   });
 
-  it('secures a serial URL without adding noVNC query params', () => {
+  it('leaves a serial URL untouched, noVNC query params included', () => {
     const out = normalizeConsoleUrl('ws://host:6083/?token=abc', 'SERIAL');
-    expect(out).toBe('wss://host:6083/?token=abc');
+    expect(out).toBe('ws://host:6083/?token=abc');
     expect(out).not.toContain('scale=true');
+  });
+
+  it('passes an already-wss serial URL through', () => {
+    expect(normalizeConsoleUrl('wss://host:6083/?token=abc', 'SERIAL'))
+      .toBe('wss://host:6083/?token=abc');
   });
 
   it('does not add scale=true twice', () => {

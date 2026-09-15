@@ -76,13 +76,13 @@ afterEach(() => {
 });
 
 describe('getConsoleUrlForProject', () => {
-  it('asks Nova for a serial console and returns a wss:// URL', async () => {
+  it('asks Nova for a serial console and returns its URL unaltered', async () => {
     const sent = stubRemoteConsole('ws://nova.example.org:6083/?token=abc');
 
     const url = await getConsoleUrlForProject(provider, 'team-1', INSTANCE, 'SERIAL');
 
     expect(sent.body.remote_console).toEqual({ protocol: 'serial', type: 'serial' });
-    expect(url).toBe('wss://nova.example.org:6083/?token=abc');
+    expect(url).toBe('ws://nova.example.org:6083/?token=abc');
   });
 
   it('never adds noVNC query params to a serial URL', async () => {
@@ -161,7 +161,7 @@ describe('getConsoleUrl', () => {
     const url = await getConsoleUrl(provider, INSTANCE, 'SERIAL');
 
     expect(sent.body.remote_console).toEqual({ protocol: 'serial', type: 'serial' });
-    expect(url).toBe('wss://nova.example.org:6083/?token=xyz');
+    expect(url).toBe('ws://nova.example.org:6083/?token=xyz');
   });
 
   it('maps novnc the same way the project-scoped variant does', async () => {

@@ -14,6 +14,11 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // Production serves Wiretap over HTTPS, and some console behavior keys off
+    // the page scheme, so tests run on an HTTPS origin by default.
+    environmentOptions: {
+      jsdom: { url: 'https://wiretap.test/' }
+    },
     include: ['tests/**/*.spec.js'],
     globals: false,
     setupFiles: ['./tests/setup.js']

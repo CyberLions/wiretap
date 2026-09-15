@@ -19,11 +19,17 @@ vi.mock('@xterm/xterm', () => ({
     loadAddon(addon) { this.addons.push(addon) }
     open(el) { this.opened = el }
     write(chunk) { this.written.push(chunk) }
+    /** What the component wrote, decoded the way real xterm would. */
+    get decoded() {
+      const decoder = new TextDecoder()
+      return this.written
+        .map(c => (typeof c === 'string' ? c : decoder.decode(c, { stream: true })))
+        .join('')
+    }
     onData(handler) { this.dataHandlers.push(handler) }
     dispose() { this.disposed = true }
     /** Simulate the user typing (or pasting) into the terminal. */
     emitData(data) { this.dataHandlers.forEach(h => h(data)) }
-    get output() { return this.written.join('') }
   }
 }))
 
@@ -153,13 +159,13 @@ describe('SerialConsole - connecting', () => {
     expect(wrapper.text()).not.toContain('Connecting to serial console')
   })
 
-  it('nudges the guest for a fresh prompt on connect', async () => {
+  it('sends nothing on connect, so it cannot answer a prompt on a shared tty', async () => {
     await mountConsole()
 
     FakeWebSocket.last.open()
     await flushPromises()
 
-    expect(FakeWebSocket.last.sentText).toBe('\r')
+    expect(FakeWebSocket.last.sent).toHaveLength(0)
   })
 
   it('emits its status so the parent can react', async () => {
@@ -178,7 +184,6 @@ describe('SerialConsole - input', () => {
     const socket = FakeWebSocket.last
     socket.open()
     await flushPromises()
-    socket.sent.length = 0
 
     terminals[0].emitData('whoami\r')
 
@@ -206,7 +211,6 @@ describe('SerialConsole - input', () => {
     const socket = FakeWebSocket.last
     socket.open()
     await flushPromises()
-    socket.sent.length = 0
 
     terminals[0].emitData('é')
 
@@ -233,7 +237,7 @@ describe('SerialConsole - output', () => {
 
     socket.receive(new TextEncoder().encode('root@server:~# ').buffer)
 
-    expect(terminals[0].output).toContain('root@server:~# ')
+    expect(terminals[0].decoded).toContain('root@server:~# ')
   })
 
   it('writes string frames straight through', async () => {
@@ -244,7 +248,7 @@ describe('SerialConsole - output', () => {
 
     socket.receive('login: ')
 
-    expect(terminals[0].output).toContain('login: ')
+    expect(terminals[0].decoded).toContain('login: ')
   })
 
   it('preserves control sequences byte for byte', async () => {
@@ -256,7 +260,22 @@ describe('SerialConsole - output', () => {
     const clearScreen = ESC + '[2J' + ESC + '[H'
     socket.receive(new TextEncoder().encode(clearScreen).buffer)
 
-    expect(terminals[0].output).toBe(clearScreen)
+    expect(terminals[0].decoded).toBe(clearScreen)
+  })
+
+  it('survives a multi-byte character split across two frames', async () => {
+    // The proxy splits the byte stream wherever it likes; decoding each frame
+    // as a standalone document would turn this into two replacement chars.
+    await mountConsole()
+    const socket = FakeWebSocket.last
+    socket.open()
+    await flushPromises()
+
+    const bytes = new TextEncoder().encode('na\u00efve')
+    socket.receive(bytes.slice(0, 3).buffer)
+    socket.receive(bytes.slice(3).buffer)
+
+    expect(terminals[0].decoded).toBe('na\u00efve')
   })
 
   it('handles multi-byte UTF-8 in the stream', async () => {
@@ -267,7 +286,7 @@ describe('SerialConsole - output', () => {
 
     socket.receive(new TextEncoder().encode('naïve').buffer)
 
-    expect(terminals[0].output).toBe('naïve')
+    expect(terminals[0].decoded).toBe('naïve')
   })
 })
 
