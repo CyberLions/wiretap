@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const { search, searchAll, insert, update, deleteFrom } = require('../utils/db');
 const { authenticateToken, canAccessInstance } = require('../middleware/auth');
 const { jwtConfig, vncConfig } = require('../utils/config');
+const { isSupportedConsoleType } = require('../utils/console');
 
 /**
  * @swagger
@@ -53,6 +54,10 @@ router.post('/:instanceId/console', authenticateToken, canAccessInstance, async 
   try {
     const { instanceId } = req.params;
     const { console_type = 'NOVNC' } = req.body;
+
+    if (!isSupportedConsoleType(console_type)) {
+      return res.status(400).json({ error: `Unsupported console type: ${console_type}` });
+    }
     
     const instance = await search('instances', 'id', instanceId);
     if (!instance) {
