@@ -10,11 +10,22 @@
       <span>{{ statusMessage }}</span>
       <button
         v-if="status === 'closed' || status === 'error'"
-        @click="connect"
+        @click="$emit('reconnect')"
+        data-serial-reconnect
         class="px-2 py-1 rounded bg-gray-700 text-white hover:bg-gray-600"
       >
         Reconnect
       </button>
+    </div>
+
+    <!-- A serial getty prints its banner once, at boot. Attaching later lands
+         on a tty that has nothing left to say, so the pane looks broken until
+         the user pokes it. Say so rather than let them guess. -->
+    <div
+      v-if="status === 'open' && !hasOutput"
+      class="px-4 py-2 text-xs font-mono border-b border-gray-700 bg-gray-800 text-gray-400"
+    >
+      Connected. Press Enter if the screen is blank.
     </div>
 
     <div ref="terminalEl" class="flex-1 min-h-0 w-full"></div>
@@ -39,10 +50,12 @@ export default {
       default: 14
     }
   },
-  emits: ['status'],
+  emits: ['status', 'reconnect'],
   setup(props, { emit, expose }) {
     const terminalEl = ref(null)
     const status = ref('connecting')
+    // Whether the far end has sent a single byte on this connection.
+    const hasOutput = ref(false)
 
     let term = null
     let fitAddon = null
@@ -102,6 +115,7 @@ export default {
       if (!props.url) return
 
       disconnect()
+      hasOutput.value = false
       setStatus('connecting')
 
       // Nova's serial proxy is websockify underneath, which negotiates the
@@ -119,6 +133,7 @@ export default {
 
       socket.onmessage = (event) => {
         if (!term || event.data == null) return
+        hasOutput.value = true
 
         if (typeof event.data === 'string') {
           term.write(event.data)
@@ -212,6 +227,7 @@ export default {
     return {
       terminalEl,
       status,
+      hasOutput,
       statusMessage,
       statusClass,
       connect

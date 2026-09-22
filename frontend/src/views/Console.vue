@@ -223,6 +223,7 @@
             v-if="secureConsoleUrl && isSerialConsole"
             :key="secureConsoleUrl"
             :url="secureConsoleUrl"
+            @reconnect="reconnectSerial"
             class="w-full h-full"
           />
 
@@ -657,6 +658,15 @@ export default {
       }
     }
 
+    // Nova hands out a single-use token per console, so reconnecting has to go
+    // back for a new URL - dialling the old one again is guaranteed to fail.
+    // Dropping consoleUrl first forces the component to tear down and remount
+    // on the new key rather than reuse a socket we no longer control.
+    const reconnectSerial = async () => {
+      consoleUrl.value = ''
+      await loadConsole()
+    }
+
     const toggleConsoleMenu = () => {
       isConsoleMenuOpen.value = !isConsoleMenuOpen.value
     }
@@ -884,6 +894,7 @@ export default {
       isConsoleMenuOpen,
       isSerialConsole,
       toggleConsoleMenu,
+      reconnectSerial,
       selectConsoleType,
       isLocked,
       canShowConsole,

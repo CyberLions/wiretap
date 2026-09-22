@@ -325,15 +325,39 @@ describe('SerialConsole - failures', () => {
     expect(wrapper.text()).toMatch(/another session/i)
   })
 
-  it('opens a new socket when the user clicks Reconnect', async () => {
+  // A serial getty prints its banner once, at boot. Attaching afterwards lands
+  // on a silent tty, and without a hint the pane just looks broken.
+  it('hints to press Enter while the tty has said nothing', async () => {
+    const wrapper = await mountConsole()
+    FakeWebSocket.last.open()
+    await flushPromises()
+
+    expect(wrapper.text()).toMatch(/press enter/i)
+  })
+
+  it('drops the hint as soon as the first byte arrives', async () => {
+    const wrapper = await mountConsole()
+    FakeWebSocket.last.open()
+    await flushPromises()
+    FakeWebSocket.last.receive('ubuntu login: ')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toMatch(/press enter/i)
+  })
+
+  // Nova's console tokens are single-use, so the URL we were handed is spent
+  // the moment the first socket used it. Reconnecting has to go back to the
+  // API for a new one, which only the parent can do.
+  it('asks the parent for a fresh console rather than redialling a spent token', async () => {
     const wrapper = await mountConsole()
     FakeWebSocket.last.serverClose()
     await flushPromises()
 
-    await wrapper.find('button').trigger('click')
+    await wrapper.find('[data-serial-reconnect]').trigger('click')
     await flushPromises()
 
-    expect(FakeWebSocket.instances).toHaveLength(2)
+    expect(wrapper.emitted('reconnect')).toHaveLength(1)
+    expect(FakeWebSocket.instances).toHaveLength(1)
   })
 })
 

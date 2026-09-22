@@ -55,7 +55,11 @@ const SERIAL_URL = 'wss://nova.example.org:6083/?token=a'
 const SerialConsoleStub = {
   name: 'SerialConsole',
   props: ['url'],
-  template: '<div data-test="serial-console">{{ url }}</div>'
+  emits: ['reconnect'],
+  template:
+    '<div data-test="serial-console">{{ url }}' +
+    '<button data-test="serial-reconnect" @click="$emit(\'reconnect\')"></button>' +
+    '</div>'
 }
 
 async function mountConsole() {
@@ -218,6 +222,20 @@ describe('Console - rendering the right console', () => {
     await chooseType(wrapper, 'xterm.js')
 
     expect(wrapper.find('[data-test="serial-console"]').text()).toBe(SERIAL_URL)
+  })
+
+  // The token in a console URL is spent once the terminal has dialled it, so a
+  // reconnect has to fetch a new one. Redialling the same URL always fails.
+  it('fetches a fresh console URL when the terminal asks to reconnect', async () => {
+    const wrapper = await mountConsole()
+    await chooseType(wrapper, 'xterm.js')
+    const callsBefore = getConsole.mock.calls.length
+
+    await wrapper.find('[data-test="serial-reconnect"]').trigger('click')
+    await flushPromises()
+
+    expect(getConsole.mock.calls.length).toBe(callsBefore + 1)
+    expect(getConsole).toHaveBeenLastCalledWith('inst-1', 'SERIAL')
   })
 
   it('upgrades a ws:// URL to wss:// on an HTTPS page', async () => {
