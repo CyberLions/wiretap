@@ -199,35 +199,34 @@ per instance:
 - **xterm.js** - Nova's serial console, a raw byte stream rendered directly, so
   a paste arrives as a single write.
 
-**Terminal size.** A serial line carries no window size, so the guest stays at
+**Terminal size.** A serial line carries no window size. SSH and local
+terminals have a side channel for it; a UART does not, so the guest keeps
 whatever its getty started with (usually 80x24) however large the browser
-window is: vim draws into the top-left corner and long shell commands wrap at
-the wrong column. Two ways to fix it:
+window is - vim draws into the top-left corner and long commands wrap at the
+wrong column. Nothing on this side can fix that: the size lives in the guest's
+termios, so the guest has to set it.
 
-- Press **Sync Size** in the toolbar. It runs `stty rows R cols C` on the guest
-  to match the pane. This types a command at the prompt, so use it at a shell -
-  never while an editor is open, where the same bytes are editor commands.
-- Bake the snippet below into your images as
-  `/etc/profile.d/serial-resize.sh`. Serial logins then size themselves, with
-  nothing typed and nothing to press.
-
-If a session is already wrong, `reset` in the guest clears the damage.
+It can work this out for itself. Park the cursor far off-screen and ask where
+it actually landed with a Cursor Position Report; xterm.js answers, and the
+reply is the real size. Run at login this needs no interaction, and unlike
+typing `stty` at the prompt it cannot land in an editor. Bake it into your
+images as `/etc/profile.d/serial-resize.sh`:
 
 ```sh
-# /etc/profile.d/serial-resize.sh
-#
-# resize(1) parks the cursor at row 999 column 999 and reads back where it
-# actually landed via a Cursor Position Report (ESC[6n). xterm.js answers CPR,
-# so the guest learns the real size; eval applies the COLUMNS/LINES it prints.
-# Only serial ttys are touched - over SSH the size is already correct.
 case "$(tty 2>/dev/null)" in
   /dev/ttyS*|/dev/ttyAMA*|/dev/hvc*)
-    if command -v resize >/dev/null 2>&1; then
-      eval "$(resize)" >/dev/null 2>&1
+    if [ -t 0 ] && [ -n "$BASH_VERSION" ]; then
+      __old=$(stty -g)
+      stty raw -echo min 0 time 2
+      printf '\033[999;999H\033[6n' > /dev/tty
+      IFS='[;R' read -r -d R -t 2 _ __rows __cols < /dev/tty
+      stty "$__old"
+      [ -n "$__rows" ] && [ -n "$__cols" ] && stty rows "$__rows" cols "$__cols"
+      unset __old __rows __cols
     fi
 
-    # The serial getty hands out TERM=vt220, which makes vim fall back to a
-    # dumber redraw path and drops color. xterm.js is an xterm.
+    # The serial getty hands out TERM=vt220, which costs vim color and its
+    # better redraw path.
     case "$TERM" in
       vt220|vt100|dumb|'') TERM=xterm-256color; export TERM ;;
     esac
@@ -235,9 +234,10 @@ case "$(tty 2>/dev/null)" in
 esac
 ```
 
-`resize(1)` comes from the `xterm` package on Debian/Ubuntu and `xterm-resize`
-on RHEL/Fedora; without it the snippet is a no-op and **Sync Size** is the only
-option.
+The workshops repo installs this through its `serial_console` Ansible role. On
+an image without it, log in and run `stty rows R cols C` by hand at a shell
+prompt - never with an editor open, where those bytes are editor commands. If a
+session is already wrong, `reset` clears the damage.
 
 **Requirements.** The serial console needs `[serial_console] enabled = true` in
 the cloud's `nova.conf`, and instances must have been created after it was

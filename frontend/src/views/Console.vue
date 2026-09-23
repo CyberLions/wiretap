@@ -97,20 +97,6 @@
               </div>
             </div>
 
-            <!-- Sync Size: serial only. See syncTerminalSize() for why this is
-                 a button and not something we do on connect or on resize. -->
-            <button
-              v-if="isSerialConsole"
-              @click="syncTerminalSize"
-              :disabled="isLocked || !canShowConsole || !secureConsoleUrl"
-              data-serial-sync-size
-              title="Run stty on the guest so it matches this window. Types a command at the prompt - do not use while an editor is open."
-              class="inline-flex items-center px-3 py-2 text-sm font-medium text-white bg-gray-700 rounded-md hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-800 transition-colors duration-200"
-            >
-              <ArrowsRightLeftIcon class="w-4 h-4 mr-2" />
-              Sync Size
-            </button>
-
             <!-- Refresh Console Button -->
             <button
               @click="refreshConsole"
@@ -236,7 +222,6 @@
           <SerialConsole
             v-if="secureConsoleUrl && isSerialConsole"
             :key="secureConsoleUrl"
-            ref="serialConsole"
             :url="secureConsoleUrl"
             @reconnect="reconnectSerial"
             class="w-full h-full"
@@ -378,7 +363,6 @@ import {
   ChevronDownIcon,
   CheckIcon,
   CommandLineIcon,
-  ArrowsRightLeftIcon,
   PowerIcon,
   BoltIcon
 } from '@heroicons/vue/24/outline'
@@ -396,8 +380,7 @@ export default {
     ChevronDownIcon,
     CheckIcon,
     CommandLineIcon,
-    ArrowsRightLeftIcon,
-    PowerIcon,
+      PowerIcon,
     BoltIcon
   },
   setup() {
@@ -415,7 +398,6 @@ export default {
     const currentPowerAction = ref('')
     const isRebootMenuOpen = ref(false)
     const consoleContainer = ref(null)
-    const serialConsole = ref(null)
     const consoleUrl = ref('')
     const consoleType = ref(loadPreferredConsoleType(route.params.id))
     const isConsoleMenuOpen = ref(false)
@@ -685,22 +667,6 @@ export default {
       await loadConsole()
     }
 
-    /**
-     * Ask the terminal to tell the guest its real size.
-     *
-     * Nothing carries a window size over a serial line, so the guest sits at
-     * its getty's 80x24 no matter how wide this pane is, and vim draws into
-     * the corner. Correcting it means running stty on the far end, i.e. typing
-     * at whatever is at the prompt - harmless at a shell, and not harmless
-     * inside an editor. So it stays on a button the user presses knowingly
-     * rather than firing on connect or on every pane resize.
-     */
-    const syncTerminalSize = () => {
-      if (!serialConsole.value?.syncSize()) {
-        showToast('Serial console is not connected', 'error')
-      }
-    }
-
     const toggleConsoleMenu = () => {
       isConsoleMenuOpen.value = !isConsoleMenuOpen.value
     }
@@ -920,7 +886,6 @@ export default {
       currentPowerAction,
       isRebootMenuOpen,
       consoleContainer,
-      serialConsole,
       consoleUrl,
       secureConsoleUrl,
       consoleType,
@@ -930,7 +895,6 @@ export default {
       isSerialConsole,
       toggleConsoleMenu,
       reconnectSerial,
-      syncTerminalSize,
       selectConsoleType,
       isLocked,
       canShowConsole,
