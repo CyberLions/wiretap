@@ -170,6 +170,33 @@ export default {
       socket.send(encoder.encode(data))
     }
 
+    /**
+     * Tell the guest how big this terminal actually is.
+     *
+     * A serial console is a raw byte pipe. Unlike SSH or a local pty there is
+     * no SIGWINCH channel - Nova's serialproxy is websockify in front of the
+     * guest's emulated UART and carries no control frames - so the far end
+     * keeps whatever size its getty started with, usually 80x24. Full-screen
+     * programs then draw into that corner of the pane and the shell wraps its
+     * line editing at the wrong column.
+     *
+     * The only cure is to run stty on the far end, which means typing at
+     * whatever happens to be sitting at the prompt. That is why this is never
+     * called automatically, not on connect and not on resize: fired while an
+     * editor has focus, these bytes are editor commands. It runs when the user
+     * asks for it and at no other time.
+     *
+     * Returns false if there was no open socket to send it down.
+     */
+    const syncSize = () => {
+      if (!term) return false
+      if (!socket || socket.readyState !== 1) return false
+
+      // \r, not \n: that is what Enter puts on the wire for a tty.
+      send(`stty rows ${term.rows} cols ${term.cols}\r`)
+      return true
+    }
+
     onMounted(() => {
       // Deliberately not awaiting anything here: the template ref is already
       // populated when onMounted fires, and an await would let the component
@@ -222,7 +249,7 @@ export default {
       if (next && next !== previous) connect()
     })
 
-    expose({ connect, disconnect, fit })
+    expose({ connect, disconnect, fit, syncSize })
 
     return {
       terminalEl,

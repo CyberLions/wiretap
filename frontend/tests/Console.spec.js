@@ -52,10 +52,15 @@ const SERIAL_URL = 'wss://nova.example.org:6083/?token=a'
  * SerialConsole is exercised on its own in SerialConsole.spec.js; here we only
  * care that Console picks it, so it is replaced with a marker component.
  */
+const syncSize = vi.fn(() => true)
+
 const SerialConsoleStub = {
   name: 'SerialConsole',
   props: ['url'],
   emits: ['reconnect'],
+  // Console reaches the real component through a template ref to call
+  // syncSize(), so the stub has to offer one too.
+  methods: { syncSize: (...args) => syncSize(...args) },
   template:
     '<div data-test="serial-console">{{ url }}' +
     '<button data-test="serial-reconnect" @click="$emit(\'reconnect\')"></button>' +
@@ -386,5 +391,55 @@ describe('Console - picker label', () => {
     const wrapper = await mountConsole()
 
     expect(typeButton(wrapper).text()).toContain('noVNC')
+  })
+})
+
+// A serial line carries no window size, so the guest keeps its getty's 80x24
+// however wide the pane is. Correcting it means running stty on the far end,
+// which is typing at the prompt - fine at a shell, destructive inside an
+// editor - so it lives on a button rather than firing by itself.
+describe('Console - syncing the terminal size', () => {
+  const syncButton = wrapper => wrapper.find('button[data-serial-sync-size]')
+
+  it('offers Sync Size only for the serial console', async () => {
+    const wrapper = await mountConsole()
+
+    expect(syncButton(wrapper).exists()).toBe(false)
+
+    await chooseType(wrapper, 'xterm.js')
+
+    expect(syncButton(wrapper).exists()).toBe(true)
+  })
+
+  it('asks the terminal to tell the guest its size', async () => {
+    const wrapper = await mountConsole()
+    await chooseType(wrapper, 'xterm.js')
+
+    await syncButton(wrapper).trigger('click')
+
+    expect(syncSize).toHaveBeenCalledTimes(1)
+  })
+
+  it('warns instead of failing silently when the socket is not open', async () => {
+    syncSize.mockReturnValueOnce(false)
+    const wrapper = await mountConsole()
+    await chooseType(wrapper, 'xterm.js')
+
+    await syncButton(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.vm.toast.show).toBe(true)
+    expect(wrapper.vm.toast.type).toBe('error')
+    expect(wrapper.vm.toast.message).toMatch(/not connected/i)
+  })
+
+  it('stays quiet when the size went through', async () => {
+    const wrapper = await mountConsole()
+    await chooseType(wrapper, 'xterm.js')
+
+    await syncButton(wrapper).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.vm.toast.show).toBe(false)
   })
 })

@@ -9,6 +9,10 @@ vi.mock('@xterm/xterm', () => ({
   Terminal: class {
     constructor(options) {
       this.options = options
+      // What FitAddon would have worked out from the pane; the real addon sets
+      // these, and syncSize reports them to the guest.
+      this.cols = 245
+      this.rows = 55
       this.written = []
       this.dataHandlers = []
       this.disposed = false
@@ -358,6 +362,63 @@ describe('SerialConsole - failures', () => {
 
     expect(wrapper.emitted('reconnect')).toHaveLength(1)
     expect(FakeWebSocket.instances).toHaveLength(1)
+  })
+})
+
+// Nothing carries a window size over a serial line, so the guest stays at its
+// getty's 80x24 and vim draws into the corner of a wide pane. The only cure is
+// running stty on the far end, which is typing at the prompt - so it happens
+// when asked and never on its own.
+describe('SerialConsole - telling the guest its size', () => {
+  it('sends stty with the terminal size the fit addon settled on', async () => {
+    const wrapper = await mountConsole()
+    FakeWebSocket.last.open()
+    await flushPromises()
+
+    expect(wrapper.vm.syncSize()).toBe(true)
+    expect(FakeWebSocket.last.sentText).toBe('stty rows 55 cols 245\r')
+  })
+
+  it('ends the command with a carriage return, which is what Enter sends', async () => {
+    const wrapper = await mountConsole()
+    FakeWebSocket.last.open()
+    await flushPromises()
+
+    wrapper.vm.syncSize()
+
+    expect(FakeWebSocket.last.sentText.endsWith('\r')).toBe(true)
+    expect(FakeWebSocket.last.sentText).not.toContain('\n')
+  })
+
+  it('reports the size the terminal actually has, not a fixed guess', async () => {
+    const wrapper = await mountConsole()
+    FakeWebSocket.last.open()
+    await flushPromises()
+
+    terminals[0].cols = 120
+    terminals[0].rows = 30
+    wrapper.vm.syncSize()
+
+    expect(FakeWebSocket.last.sentText).toBe('stty rows 30 cols 120\r')
+  })
+
+  it('says so rather than throwing when the socket is not open', async () => {
+    const wrapper = await mountConsole()
+
+    expect(wrapper.vm.syncSize()).toBe(false)
+    expect(FakeWebSocket.last.sent).toHaveLength(0)
+  })
+
+  it('sends nothing on its own - not on connect, not on resize', async () => {
+    const wrapper = await mountConsole()
+    FakeWebSocket.last.open()
+    await flushPromises()
+
+    window.dispatchEvent(new Event('resize'))
+    await flushPromises()
+
+    expect(FakeWebSocket.last.sent).toHaveLength(0)
+    wrapper.unmount()
   })
 })
 

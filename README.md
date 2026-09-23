@@ -189,6 +189,62 @@ On first run, you may need to create an admin user. Check the authentication rou
 4. Access console for direct VM interaction
 5. Sync instances to update status from OpenStack
 
+### Serial Console (xterm.js)
+
+The console pane offers two renderers, picked from the toolbar and remembered
+per instance:
+
+- **noVNC** - the graphical framebuffer, in an iframe. Pasting types the text
+  in as simulated keystrokes, 40 characters at a time.
+- **xterm.js** - Nova's serial console, a raw byte stream rendered directly, so
+  a paste arrives as a single write.
+
+**Terminal size.** A serial line carries no window size, so the guest stays at
+whatever its getty started with (usually 80x24) however large the browser
+window is: vim draws into the top-left corner and long shell commands wrap at
+the wrong column. Two ways to fix it:
+
+- Press **Sync Size** in the toolbar. It runs `stty rows R cols C` on the guest
+  to match the pane. This types a command at the prompt, so use it at a shell -
+  never while an editor is open, where the same bytes are editor commands.
+- Bake the snippet below into your images as
+  `/etc/profile.d/serial-resize.sh`. Serial logins then size themselves, with
+  nothing typed and nothing to press.
+
+If a session is already wrong, `reset` in the guest clears the damage.
+
+```sh
+# /etc/profile.d/serial-resize.sh
+#
+# resize(1) parks the cursor at row 999 column 999 and reads back where it
+# actually landed via a Cursor Position Report (ESC[6n). xterm.js answers CPR,
+# so the guest learns the real size; eval applies the COLUMNS/LINES it prints.
+# Only serial ttys are touched - over SSH the size is already correct.
+case "$(tty 2>/dev/null)" in
+  /dev/ttyS*|/dev/ttyAMA*|/dev/hvc*)
+    if command -v resize >/dev/null 2>&1; then
+      eval "$(resize)" >/dev/null 2>&1
+    fi
+
+    # The serial getty hands out TERM=vt220, which makes vim fall back to a
+    # dumber redraw path and drops color. xterm.js is an xterm.
+    case "$TERM" in
+      vt220|vt100|dumb|'') TERM=xterm-256color; export TERM ;;
+    esac
+    ;;
+esac
+```
+
+`resize(1)` comes from the `xterm` package on Debian/Ubuntu and `xterm-resize`
+on RHEL/Fedora; without it the snippet is a no-op and **Sync Size** is the only
+option.
+
+**Requirements.** The serial console needs `[serial_console] enabled = true` in
+the cloud's `nova.conf`, and instances must have been created after it was
+turned on - an older VM has no serial device attached. Wiretap answers 502 for
+that case and the UI suggests noVNC. Nova serves one serial session per
+instance at a time; a second viewer gets a connection error.
+
 ### Team Management
 1. Create teams and assign users
 2. Associate instances with teams
